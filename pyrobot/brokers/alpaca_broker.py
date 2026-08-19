@@ -159,7 +159,11 @@ class AlpacaBroker(BrokerInterface):
             ) from e
 
     def place_order(self, account: str, order: dict) -> dict:
-        """Place an order with Alpaca."""
+        """Place an order with Alpaca.
+
+        Extracts symbol from orderLegCollection[0].instrument.symbol
+        (canonical order model) with fallback to top-level 'symbol' key.
+        """
         try:
             from alpaca.trading.requests import MarketOrderRequest
             from alpaca.trading.enums import OrderSide, TimeInForce
@@ -172,14 +176,26 @@ class AlpacaBroker(BrokerInterface):
             }
 
             instruction = ""
-            if "orderLegCollection" in order and order["orderLegCollection"]:
-                instruction = order["orderLegCollection"][0].get("instruction", "BUY")
             quantity = 0
+            symbol = ""
             if "orderLegCollection" in order and order["orderLegCollection"]:
-                quantity = order["orderLegCollection"][0].get("quantity", 0)
+                leg = order["orderLegCollection"][0]
+                instruction = leg.get("instruction", "BUY")
+                quantity = leg.get("quantity", 0)
+                instrument = leg.get("instrument", {})
+                symbol = instrument.get("symbol", "")
+
+            if not symbol:
+                symbol = order.get("symbol", "")
+
+            if not symbol:
+                raise OrderRejectedError(
+                    "Order rejected: no symbol found in order structure. "
+                    "Expected orderLegCollection[0].instrument.symbol or top-level 'symbol'."
+                )
 
             order_request = MarketOrderRequest(
-                symbol=order.get("symbol", ""),
+                symbol=symbol,
                 qty=quantity,
                 side=side_map.get(instruction, OrderSide.BUY),
                 time_in_force=TimeInForce.DAY,

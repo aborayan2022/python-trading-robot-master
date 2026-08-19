@@ -194,7 +194,12 @@ class IBKRBroker(BrokerInterface):
             raise OrderRejectedError(f"Order rejected by IBKR: {e}") from e
 
     def get_order_status(self, account: str, order_id: str) -> dict:
-        """Get order status from IBKR."""
+        """Get order status from IBKR.
+
+        Checks open trades first, then all completed trades.
+        Returns UNKNOWN (not FILLED) when order cannot be found,
+        since 'not found' does not mean 'filled'.
+        """
         try:
             for trade in self._ib.openTrades():
                 if str(trade.order.orderId) == order_id:
@@ -205,9 +210,22 @@ class IBKRBroker(BrokerInterface):
                         "remaining_quantity": trade.orderStatus.remaining,
                     }
 
+            for trade in self._ib.allTrades():
+                if str(trade.order.orderId) == order_id:
+                    return {
+                        "order_id": order_id,
+                        "status": str(trade.orderStatus.status),
+                        "filled_quantity": trade.orderStatus.filled,
+                        "remaining_quantity": trade.orderStatus.remaining,
+                    }
+
+            logger.warning(
+                f"Order {order_id} not found in open or completed trades. "
+                f"Returning UNKNOWN status — requires reconciliation."
+            )
             return {
                 "order_id": order_id,
-                "status": "FILLED",
+                "status": "UNKNOWN",
                 "filled_quantity": 0,
                 "remaining_quantity": 0,
             }
