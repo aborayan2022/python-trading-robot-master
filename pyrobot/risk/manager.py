@@ -1,0 +1,406 @@
+"""Risk Manager — central orchestration for all risk management.
+
+Integrates:
+    - KillSwitch (hard stop)
+    - RiskLimits (configuration)
+    - PositionSizer (order sizing)
+    - ExposureMonitor (portfolio exposure)
+    - DrawdownMonitor (drawdown protection)
+    - CircuitBreaker (automatic halt)
+
+The RiskManager is the single authority for all risk decisions.
+No order should bypass it.
+
+Usage::
+
+    rm = RiskManager(limits=RiskLimits.conservative())
+
+    # Pre-trade check (called by ExecutionEngine)
+    approved, reason = rm.check_order(
+        order=order,
+        positions=current_positions,
+        prices=current_prices,
+        equity=account_equity,
+    )
+
+    # Post-trade update
+    rm.record_fill(order, fill_price=150.0, fill_qty=100)
+
+    # Equity update
+    rm.update_equity(100_000.0)
+"""
+
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Optional, Tuple
+import threading
+
+from pyrobot.exceptions import (
+    KillSwitchError,
+    PositionLimitError,
+    DailyLossLimitError,
+    DrawdownLimitError,
+    ExposureLimitError,
+    RiskError,
+)
+from pyrobot.logging_config import get_logger
+from pyrobot.models.order import Order, OrderSide
+from pyrobot.risk.limits import RiskLimits
+from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
+from pyrobot.risk.position_sizer import PositionSizer
+from pyrobot.risk.exposure import ExposureMonitor, ExposureSnapshot
+from pyrobot.risk.drawdown import DrawdownMonitor
+from pyrobot.risk.circuit_breaker import CircuitBreaker
+
+logger = get_logger("risk_manager")
+
+
+class RiskManager:
+    """Central risk management authority for the trading platform.
+
+    Args:
+        limits: RiskLimits configuration. Defaults to standard limits.
+        kill_switch: Optional shared KillSwitch instance.
+        sector_map: Optional symbol → sector mapping for concentration checks.
+    """
+
+    def __init__(
+        self,
+        limits: RiskLimits | None = None,
+        kill_switch: KillSwitch | None = None,
+        sector_map: Dict[str, str] | None = None,
+    ) -> None:
+        self._limits = limits or RiskLimits()
+        self._limits.validate()
+
+        self._kill_switch = kill_switch or KillSwitch()
+        self._position_sizer = PositionSizer(limits=self._limits)
+        self._exposure_monitor = ExposureMonitor(
+            limits=self._limits, sector_map=sector_map
+        )
+        self._drawdown_monitor = DrawdownMonitor(limits=self._limits)
+        self._circuit_breaker = CircuitBreaker(limits=self._limits)
+
+        # Order throttle tracking
+        self._last_order_times: Dict[str, datetime] = {}
+        self._last_kill_switch_reset: Optional[datetime] = None
+
+        # Daily PnL tracking
+        self._daily_realized_pnl: float = 0.0
+        self._daily_date: Optional[str] = None
+
+        self._lock = threading.RLock()
+
+    # ── Pre-trade checks ──────────────────────────────────────────────────────
+
+    def check_order(
+        self,
+        order: Order,
+        positions: Dict[str, float],
+        prices: Dict[str, float],
+        equity: float,
+    ) -> Tuple[bool, str]:
+        """Run all pre-trade risk checks on an order.
+
+        This is the single entry point called by ExecutionEngine.
+
+        Args:
+            order: The Order to validate.
+            positions: Current positions (symbol → quantity).
+            prices: Current prices (symbol → price).
+            equity: Total portfolio equity.
+
+        Returns:
+            Tuple of (approved: bool, reason: str).
+
+        Raises:
+            KillSwitchError: If kill switch is active (hard stop).
+        """
+        with self._lock:
+            # 1. Kill switch guard (hard stop — always checked first)
+            self._kill_switch.guard()
+
+            # 2. Circuit breaker check
+            if self._circuit_breaker.is_open:
+                return False, (
+                    f"Circuit breaker OPEN: {self._circuit_breaker.status}"
+                )
+
+            # 3. Cooldown after kill switch reset
+            if not self._check_cooldown():
+                return False, (
+                    "Cooldown active after kill switch reset. "
+                    f"Wait {self._limits.cooldown_after_kill_switch_seconds}s"
+                )
+
+            # 4. Order throttle
+            if not self._check_order_throttle(order.symbol):
+                return False, (
+                    f"Order throttle: minimum {self._limits.min_order_interval_seconds}s "
+                    f"between orders for {order.symbol}"
+                )
+
+            # 5. Drawdown check
+            if self._drawdown_monitor.is_breached:
+                self._kill_switch.activate(
+                    KillSwitchReason.MAX_DRAWDOWN,
+                    detail=self._drawdown_monitor.status(),
+                )
+                raise KillSwitchError(
+                    f"Max drawdown breached: {self._drawdown_monitor.status()}"
+                )
+
+            # 6. Daily loss check
+            if self._drawdown_monitor.is_daily_breached:
+                self._kill_switch.activate(
+                    KillSwitchReason.DAILY_LOSS_LIMIT,
+                    detail=f"daily_loss={self._drawdown_monitor.daily_loss_pct:.2%}",
+                )
+                raise KillSwitchError(
+                    f"Daily loss limit breached: "
+                    f"{self._drawdown_monitor.daily_loss_pct:.2%}"
+                )
+
+            # 7. Exposure check
+            side_str = "BUY" if order.side in (OrderSide.BUY, OrderSide.BUY_TO_COVER) else "SELL"
+            exposure_ok, exposure_reason = self._exposure_monitor.check_order(
+                current_exposure=self._get_exposure(positions, prices, equity),
+                symbol=order.symbol,
+                side=side_str,
+                quantity=order.quantity,
+                price=self._get_fill_price(order, prices),
+                account_equity=equity,
+            )
+            if not exposure_ok:
+                return False, exposure_reason
+
+            return True, "OK"
+
+    def calculate_position_size(
+        self,
+        account_equity: float,
+        win_rate: float,
+        avg_win: float,
+        avg_loss: float,
+        price: float,
+        confidence: float = 1.0,
+        method: str = "kelly",
+    ) -> int:
+        """Calculate optimal position size.
+
+        Args:
+            account_equity: Current portfolio equity.
+            win_rate: Historical win rate.
+            avg_win: Average winning trade return.
+            avg_loss: Average losing trade return.
+            price: Current market price.
+            confidence: Signal confidence (0.0 to 1.0).
+            method: "kelly" or "fixed_fraction".
+
+        Returns:
+            Recommended number of shares.
+        """
+        if method == "kelly":
+            qty = self._position_sizer.kelly_size(
+                account_equity=account_equity,
+                win_rate=win_rate,
+                avg_win=avg_win,
+                avg_loss=avg_loss,
+                price=price,
+                confidence=confidence,
+            )
+        else:
+            stop_distance = price * 0.02  # Default 2% stop
+            qty = self._position_sizer.fixed_fraction_size(
+                account_equity=account_equity,
+                risk_per_trade_pct=self._limits.max_daily_loss_pct / 2,
+                stop_distance=stop_distance,
+                price=price,
+                confidence=confidence,
+            )
+
+        # Apply circuit breaker scaling
+        qty = int(qty * self._circuit_breaker.position_scale)
+
+        return qty
+
+    # ── Post-trade updates ────────────────────────────────────────────────────
+
+    def record_fill(
+        self,
+        order: Order,
+        fill_price: float,
+        fill_qty: float,
+    ) -> None:
+        """Record a trade fill and update all risk trackers.
+
+        Args:
+            order: The filled Order.
+            fill_price: Actual fill price.
+            fill_qty: Quantity filled.
+        """
+        with self._lock:
+            pnl = self._estimate_pnl(order, fill_price, fill_qty)
+            self._daily_realized_pnl += pnl
+            self._circuit_breaker.record_trade_result(pnl)
+
+            logger.info(
+                "Trade recorded: symbol=%s side=%s qty=%.0f price=%.2f pnl=%.2f",
+                order.symbol, order.side.value, fill_qty, fill_price, pnl,
+            )
+
+    def update_equity(self, equity: float) -> None:
+        """Update equity and check drawdown/daily loss limits.
+
+        Args:
+            equity: Current total portfolio equity.
+        """
+        with self._lock:
+            self._drawdown_monitor.update(equity)
+
+            # Check drawdown
+            if self._drawdown_monitor.is_breached:
+                self._kill_switch.activate(
+                    KillSwitchReason.MAX_DRAWDOWN,
+                    detail=self._drawdown_monitor.status(),
+                )
+                logger.critical(
+                    "Drawdown limit breached — kill switch activated: %s",
+                    self._drawdown_monitor.status(),
+                )
+
+            # Check daily loss
+            if self._drawdown_monitor.is_daily_breached:
+                self._kill_switch.activate(
+                    KillSwitchReason.DAILY_LOSS_LIMIT,
+                    detail=f"daily_loss={self._drawdown_monitor.daily_loss_pct:.2%}",
+                )
+                logger.critical(
+                    "Daily loss limit breached — kill switch activated"
+                )
+
+            # Feed drawdown to circuit breaker
+            self._circuit_breaker.check_drawdown_breach(
+                self._drawdown_monitor.current_drawdown
+            )
+
+    def set_daily_start(self, equity: float, date_str: str) -> None:
+        """Record start-of-day equity for daily loss tracking."""
+        with self._lock:
+            self._drawdown_monitor.set_daily_start(equity, date_str)
+            self._daily_realized_pnl = 0.0
+            self._daily_date = date_str
+
+    # ── Kill switch integration ───────────────────────────────────────────────
+
+    def activate_kill_switch(
+        self,
+        reason: KillSwitchReason,
+        detail: str = "",
+    ) -> None:
+        """Manually activate the kill switch."""
+        self._kill_switch.activate(reason, detail=detail)
+
+    def reset_kill_switch(self, confirmed: bool = False) -> None:
+        """Reset the kill switch and record cooldown start."""
+        self._kill_switch.reset(confirmed=confirmed)
+        with self._lock:
+            self._last_kill_switch_reset = datetime.now(timezone.utc)
+            self._circuit_breaker.force_close()
+
+    # ── Properties ────────────────────────────────────────────────────────────
+
+    @property
+    def kill_switch(self) -> KillSwitch:
+        return self._kill_switch
+
+    @property
+    def drawdown_monitor(self) -> DrawdownMonitor:
+        return self._drawdown_monitor
+
+    @property
+    def circuit_breaker(self) -> CircuitBreaker:
+        return self._circuit_breaker
+
+    @property
+    def exposure_monitor(self) -> ExposureMonitor:
+        return self._exposure_monitor
+
+    @property
+    def position_sizer(self) -> PositionSizer:
+        return self._position_sizer
+
+    @property
+    def limits(self) -> RiskLimits:
+        return self._limits
+
+    @property
+    def daily_realized_pnl(self) -> float:
+        return self._daily_realized_pnl
+
+    def status(self) -> Dict:
+        """Full risk status snapshot."""
+        return {
+            "kill_switch_active": self._kill_switch.is_active,
+            "circuit_breaker_state": self._circuit_breaker.state.value,
+            "circuit_breaker_status": self._circuit_breaker.status,
+            "drawdown": self._drawdown_monitor.current_drawdown,
+            "max_drawdown": self._drawdown_monitor.max_drawdown,
+            "daily_loss_pct": self._drawdown_monitor.daily_loss_pct,
+            "daily_realized_pnl": self._daily_realized_pnl,
+            "position_scale": self._circuit_breaker.position_scale,
+        }
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+
+    def _get_exposure(
+        self,
+        positions: Dict[str, float],
+        prices: Dict[str, float],
+        equity: float,
+    ) -> ExposureSnapshot:
+        """Calculate current exposure snapshot."""
+        return self._exposure_monitor.calculate_exposure(
+            positions=positions,
+            prices=prices,
+            account_equity=equity,
+        )
+
+    def _get_fill_price(self, order: Order, prices: Dict[str, float]) -> float:
+        """Estimate fill price for risk checks."""
+        if order.limit_price:
+            return order.limit_price
+        return prices.get(order.symbol, 0.0)
+
+    def _check_cooldown(self) -> bool:
+        """Check if cooldown after kill switch reset has elapsed."""
+        if self._last_kill_switch_reset is None:
+            return True
+        elapsed = (
+            datetime.now(timezone.utc) - self._last_kill_switch_reset
+        ).total_seconds()
+        return elapsed >= self._limits.cooldown_after_kill_switch_seconds
+
+    def _check_order_throttle(self, symbol: str) -> bool:
+        """Check minimum interval between orders for the same symbol."""
+        last_time = self._last_order_times.get(symbol)
+        if last_time is None:
+            return True
+        elapsed = (datetime.now(timezone.utc) - last_time).total_seconds()
+        if elapsed < self._limits.min_order_interval_seconds:
+            return False
+        self._last_order_times[symbol] = datetime.now(timezone.utc)
+        return True
+
+    def _estimate_pnl(self, order: Order, fill_price: float, fill_qty: float) -> float:
+        """Estimate PnL from a fill (requires entry price context for closes)."""
+        # Simplified: for new positions, PnL is 0.
+        # Full implementation needs position context.
+        return 0.0
+
+    def __repr__(self) -> str:
+        return (
+            f"RiskManager("
+            f"kill_switch={'ACTIVE' if self._kill_switch.is_active else 'inactive'}, "
+            f"circuit={self._circuit_breaker.state.value}, "
+            f"dd={self._drawdown_monitor.current_drawdown:.2%})"
+        )
