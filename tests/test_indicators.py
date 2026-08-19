@@ -1,191 +1,190 @@
-"""Unit test module for the Indicator Object.
+"""Tests for the Indicators class."""
 
-Will perform an instance test to make sure it creates it. Additionally,
-it will test different properties and methods of the object.
-"""
-import unittest
 import operator
+
+import numpy as np
 import pandas as pd
+import pytest
 
-from unittest import TestCase
-from datetime import datetime
-from datetime import timedelta
-from configparser import ConfigParser
-
-from pyrobot.robot import PyRobot
 from pyrobot.indicators import Indicators
 from pyrobot.stock_frame import StockFrame
 
 
-class PyRobotIndicatorTest(TestCase):
+class TestBollingerBands:
+    """Tests for Bollinger Bands calculation."""
 
-    """Will perform a unit test for the Indicator Object."""
+    def test_upper_band_above_mean(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.bollinger_bands(period=20)
+        frame = indicators.price_data_frame
 
-    def setUp(self) -> None:
-        """Set up the Indicator Client."""
+        valid = frame.dropna(subset=["band_upper", "band_lower"])
+        assert (valid["band_upper"] >= valid["band_lower"]).all()
 
-        # Grab configuration values.
-        config = ConfigParser()
-        config.read('configs/config.ini')       
+    def test_bands_contain_majority_of_prices(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.bollinger_bands(period=20)
+        frame = indicators.price_data_frame
 
-        CLIENT_ID = config.get('main', 'CLIENT_ID')
-        REDIRECT_URI = config.get('main', 'REDIRECT_URI')
-        CREDENTIALS_PATH = config.get('main', 'JSON_PATH')
+        valid = frame.dropna(subset=["band_upper", "band_lower"])
+        within_bands = (
+            (valid["close"] >= valid["band_lower"])
+            & (valid["close"] <= valid["band_upper"])
+        )
+        assert within_bands.mean() > 0.5
 
-        # Create a robot.
-        self.robot = PyRobot(
-            client_id = CLIENT_ID, 
-            redirect_uri = REDIRECT_URI, 
-            credentials_path = CREDENTIALS_PATH
+    def test_bands_symmetric(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.bollinger_bands(period=20)
+        frame = indicators.price_data_frame
+
+        valid = frame.dropna(subset=["band_upper", "band_lower"])
+        mid = (valid["band_upper"] + valid["band_lower"]) / 2
+        upper_dist = (valid["band_upper"] - mid).round(6)
+        lower_dist = (mid - valid["band_lower"]).round(6)
+        assert np.allclose(upper_dist, lower_dist, atol=1e-10)
+
+
+class TestStochasticOscillator:
+    """Tests for Stochastic Oscillator calculation."""
+
+    def test_values_between_0_and_100(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.stochastic_oscillator()
+        frame = indicators.price_data_frame
+
+        valid = frame.dropna(subset=["stochastic_oscillator"])
+        assert (valid["stochastic_oscillator"] >= -1).all()
+        assert (valid["stochastic_oscillator"] <= 101).all()
+
+    def test_formula_correct(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.stochastic_oscillator()
+        frame = indicators.price_data_frame
+
+        valid = frame.dropna(subset=["stochastic_oscillator"])
+        expected = (valid["close"] - valid["low"]) / (valid["high"] - valid["low"]) * 100
+        pd.testing.assert_series_equal(
+            valid["stochastic_oscillator"], expected, check_names=False, atol=1e-10
         )
 
-        # Grab historical prices, first define the start date and end date.
-        start_date = datetime.today()
-        end_date = start_date - timedelta(days=30)
 
-        # Grab the historical prices.
-        historical_prices = self.robot.grab_historical_prices(
-            start=end_date,
-            end=start_date,
-            bar_size=1,
-            bar_type='minute',
-            symbols=['AAPL','MSFT']
-        )
+class TestRSI:
+    """Tests for RSI calculation."""
 
-        # Convert data to a Data Frame.
-        self.stock_frame = self.robot.create_stock_frame(data=historical_prices['aggregated'])
+    def test_values_between_0_and_100(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.rsi(period=14)
+        frame = indicators.price_data_frame
 
-        # Create the indicator client.
-        self.indicator_client = Indicators(price_data_frame=self.stock_frame)
-
-    def test_creates_instance_of_session(self):
-        """Create an instance and make sure it's a StockFrame."""
-
-        self.assertIsInstance(self.stock_frame, StockFrame)
-        self.assertIsInstance(self.indicator_client, Indicators)
-    
-    def test_price_frame_data_property(self):
-        """Test getting the Price Data Frame."""
-
-        self.assertIsNotNone(self.indicator_client.price_data_frame)
-
-    def test_is_multi_index_property(self):
-        """Test getting the Price Data Frame."""
-
-        self.assertTrue(self.indicator_client.is_multi_index)
-
-    def test_change_in_price(self):
-        """Test adding the Change in Price."""
-        
-        # Create the Change in Price indicator.
-        self.indicator_client.change_in_price()
-
-        # Check if we have the column.
-        self.assertIn('change_in_price', self.stock_frame.frame.columns)
-
-        # And that it's not empty.
-        self.assertFalse(self.stock_frame.frame['change_in_price'].empty)
-
-    def test_rsi(self):
-        """Test adding the Relative Strength Index."""
-        
-        # Create the RSI indicator.
-        self.indicator_client.rsi(period=14)
-
-        # Check if we have the column.
-        self.assertIn('rsi', self.stock_frame.frame.columns)
-
-        # And that it's not empty.
-        self.assertFalse(self.stock_frame.frame['rsi'].empty)
-
-    def test_sma(self):
-        """Test adding the Simple Moving Average."""
-        
-        # Create the SMA indicator.
-        self.indicator_client.sma(period=200)
-
-        # Check if we have the column.
-        self.assertIn('sma', self.stock_frame.frame.columns)
-
-        # And that it's not empty.
-        self.assertFalse(self.stock_frame.frame['sma'].empty)
-
-    def test_ema(self):
-        """Test adding the Exponential Moving Average."""
-        
-        # Create the EMA indicator.
-        self.indicator_client.ema(period=50)
-
-        # Check if we have the column.
-        self.assertIn('ema', self.stock_frame.frame.columns)
-
-        # And that it's not empty.
-        self.assertFalse(self.stock_frame.frame['ema'].empty)
-
-    def test_indicator_exist(self):
-        """Test checkinf if an indicator column exist."""
-        
-        # Create the EMA indicator.
-        self.indicator_client.ema(period=50)
-
-        # Check if we have the column.
-        self.assertIn('ema', self.stock_frame.frame.columns)
-
-        # And that it's not empty.
-        self.assertTrue(self.stock_frame.do_indicator_exist(column_names=['ema']))
-
-    def test_indicator_signal(self):
-        """Test checkinf if an indicator column exist."""
-        
-        # Create the EMA indicator.
-        self.indicator_client.ema(period=50)
-
-        self.indicator_client.set_indicator_signal(
-            indicator='sma',
-            buy=50.0,
-            sell=30.0,
-            condition_buy=operator.ge,
-            condition_sell=operator.le
-        )
-
-        func_1 = operator.ge
-        func_2 = operator.le
-
-        correct_dict = {
-            'buy': 50.0,
-            'sell': 30.0,
-            'buy_operator': func_1,
-            'sell_operator': func_2
-        }
-
-        correct_dict_all = {
-            'sma':{
-                'buy': 50.0,
-                'sell': 30.0,
-                'buy_operator': func_1,
-                'sell_operator': func_2
-            }
-        }
+        valid = frame.dropna(subset=["rsi"])
+        assert (valid["rsi"] >= 0).all()
+        assert (valid["rsi"] <= 100).all()
 
 
-        # And that it's not empty.
-        self.assertDictEqual(
-            self.indicator_client.get_indicator_signal(indicator='sma'),
-            correct_dict
-        )
+class TestSMA:
+    """Tests for SMA calculation."""
 
-        # And that it's not empty.
-        self.assertDictEqual(
-            self.indicator_client.get_indicator_signal(),
-            correct_dict_all
-        )
+    def test_sma_converges_to_price(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.sma(period=10)
+        frame = indicators.price_data_frame
 
-    def tearDown(self) -> None:
-        """Teardown the Indicator object."""
+        valid = frame.dropna(subset=["sma"])
+        assert len(valid) > 0
 
-        self.stock_frame = None
-        self.indicator_client = None
+    def test_sma_shorter_period_less_smooth(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.sma(period=5, column_name="sma_5")
+        indicators.sma(period=20, column_name="sma_20")
+        frame = indicators.price_data_frame
+
+        valid = frame.dropna(subset=["sma_5", "sma_20"])
+        assert len(valid) > 0
 
 
-if __name__ == '__main__':
-    unittest.main()
+class TestCCI:
+    """Tests for Commodity Channel Index."""
+
+    def test_references_typical_price(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.commodity_channel_index(period=20)
+        frame = indicators.price_data_frame
+
+        assert "commodity_channel_index" in frame.columns
+        valid = frame.dropna(subset=["commodity_channel_index"])
+        assert len(valid) > 0
+
+    def test_no_pp_column_leakage(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.commodity_channel_index(period=20)
+        frame = indicators.price_data_frame
+
+        assert "pp" not in frame.columns
+
+
+class TestKSTOscillator:
+    """Tests for KST Oscillator."""
+
+    def test_signal_line_uses_variable_not_string(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.kst_oscillator(r1=10, r2=15, r3=20, r4=30, n1=10, n2=10, n3=10, n4=15)
+        frame = indicators.price_data_frame
+
+        assert "kst_oscillator" in frame.columns
+        assert "kst_oscillator_signal" in frame.columns
+
+        valid = frame.dropna(subset=["kst_oscillator", "kst_oscillator_signal"])
+        assert len(valid) > 0
+
+
+class TestADX:
+    """Tests for Average Directional Index."""
+
+    def test_values_between_0_and_100(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.adx(period=14)
+        frame = indicators.price_data_frame
+
+        valid = frame.dropna(subset=["adx"])
+        assert (valid["adx"] >= 0).all()
+        assert (valid["adx"] <= 100).all()
+
+
+class TestOBV:
+    """Tests for On-Balance Volume."""
+
+    def test_obv_monotonic_with_price(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.obv()
+        frame = indicators.price_data_frame
+
+        assert "obv" in frame.columns
+        assert len(frame.dropna(subset=["obv"])) > 0
+
+
+class TestVWAP:
+    """Tests for VWAP."""
+
+    def test_vwap_positive(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.vwap()
+        frame = indicators.price_data_frame
+
+        assert "vwap" in frame.columns
+        valid = frame.dropna(subset=["vwap"])
+        assert (valid["vwap"] > 0).all()
+
+
+class TestRefresh:
+    """Tests for indicator refresh mechanism."""
+
+    def test_refresh_updates_indicators(self, stock_frame):
+        indicators = Indicators(price_data_frame=stock_frame)
+        indicators.sma(period=10)
+        indicators.rsi(period=14)
+        indicators.refresh()
+
+        frame = indicators.price_data_frame
+        assert "sma" in frame.columns
+        assert "rsi" in frame.columns

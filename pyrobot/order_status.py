@@ -29,7 +29,7 @@ class OrderStatus():
         if refresh_order_info:
             self.trade_obj._update_order_status()
 
-        if self.order_status == 'FILLED':
+        if self.order_status == 'CANCELLED':
             return True
         else:
             return False

@@ -451,14 +451,10 @@ class Indicators():
         )
 
         # Define the Upper Band.
-        self._frame['band_upper'] = 4 * (self._frame['moving_std'] / self._frame['moving_avg'])
+        self._frame['band_upper'] = self._frame['moving_avg'] + (2 * self._frame['moving_std'])
 
-        # Define the lower band
-        self._frame['band_lower'] = (
-            (self._frame['close'] - self._frame['moving_avg']) + 
-            (2 * self._frame['moving_std']) / 
-            (4 * self._frame['moving_std'])
-        )
+        # Define the Lower Band.
+        self._frame['band_lower'] = self._frame['moving_avg'] - (2 * self._frame['moving_std'])
 
         # Clean up before sending back.
         self._frame.drop(
@@ -553,8 +549,8 @@ class Indicators():
 
         # Calculate the stochastic_oscillator.
         self._frame['stochastic_oscillator'] = (
-            self._frame['close'] - self._frame['low'] / 
-            self._frame['high'] - self._frame['low']
+            (self._frame['close'] - self._frame['low']) /
+            (self._frame['high'] - self._frame['low']) * 100
         )
 
         return self._frame 
@@ -800,21 +796,26 @@ class Indicators():
         self._frame['typical_price'] = (self._frame['high'] + self._frame['low'] + self._frame['close']) / 3
 
         # Calculate the Rolling Average of the Typical Price.
-        self._frame['typical_price_mean'] = self._frame['pp'].transform(
+        self._frame['typical_price_mean'] = self._frame['typical_price'].transform(
             lambda x: x.rolling(window=period).mean()
         )
 
-        # Calculate the Rolling Standard Deviation of the Typical Price.
-        self._frame['typical_price_std'] = self._frame['pp'].transform(
-            lambda x: x.rolling(window=period).std()
+        # Calculate the Mean Deviation of the Typical Price.
+        self._frame['typical_price_mean_dev'] = self._frame['typical_price'].transform(
+            lambda x: x.rolling(window=period).apply(
+                lambda y: abs(y - y.mean()).mean(), raw=True
+            )
         )
 
         # Calculate the Commodity Channel Index.
-        self._frame[column_name] = self._frame['typical_price_mean'] / self._frame['typical_price_std']
+        self._frame[column_name] = (
+            (self._frame['typical_price'] - self._frame['typical_price_mean']) /
+            (0.015 * self._frame['typical_price_mean_dev'])
+        )
 
         # Clean up before sending back.
         self._frame.drop(
-            labels=['typical_price', 'typical_price_mean', 'typical_price_std'],
+            labels=['typical_price', 'typical_price_mean', 'typical_price_mean_dev'],
             axis=1,
             inplace=True
         )
@@ -987,8 +988,8 @@ class Indicators():
         )
 
         self._frame[column_name] = 100 * (self._frame['roc_1_n'] + 2 * self._frame['roc_2_n'] + 3 * self._frame['roc_3_n'] + 4 * self._frame['roc_4_n'])
-        self._frame[column_name + "_signal"] = self._frame['column_name'].transform(
-            lambda x: x.rolling().mean()
+        self._frame[column_name + "_signal"] = self._frame[column_name].transform(
+            lambda x: x.rolling(window=9).mean()
         )
         
         # Clean up before sending back.
@@ -1017,6 +1018,131 @@ class Indicators():
 
             # Update the function.
             indicator_function(**indicator_argument)
+
+    def adx(self, period: int = 14, column_name: str = 'adx') -> pd.DataFrame:
+        """Calculates the Average Directional Index (ADX).
+
+        Arguments:
+        ----
+        period {int} -- The number of periods to use. (default: {14})
+
+        Returns:
+        ----
+        {pd.DataFrame} -- A data frame with the ADX indicator included.
+        """
+        locals_data = locals()
+        del locals_data['self']
+
+        self._current_indicators[column_name] = {}
+        self._current_indicators[column_name]['args'] = locals_data
+        self._current_indicators[column_name]['func'] = self.adx
+
+        high = self._frame['high']
+        low = self._frame['low']
+        close = self._frame['close']
+
+        plus_dm = high.diff()
+        minus_dm = -low.diff()
+
+        plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0.0)
+        minus_dm = minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0.0)
+
+        tr1 = (high - low)
+        tr2 = (high - close.shift()).abs()
+        tr3 = (low - close.shift()).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+        atr = tr.ewm(span=period, min_periods=period).mean()
+        plus_di = 100 * (plus_dm.ewm(span=period, min_periods=period).mean() / atr)
+        minus_di = 100 * (minus_dm.ewm(span=period, min_periods=period).mean() / atr)
+
+        dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
+        self._frame[column_name] = dx.ewm(span=period, min_periods=period).mean()
+
+        return self._frame
+
+    def vwap(self, column_name: str = 'vwap') -> pd.DataFrame:
+        """Calculates the Volume Weighted Average Price (VWAP).
+
+        Returns:
+        ----
+        {pd.DataFrame} -- A data frame with the VWAP indicator included.
+        """
+        locals_data = locals()
+        del locals_data['self']
+
+        self._current_indicators[column_name] = {}
+        self._current_indicators[column_name]['args'] = locals_data
+        self._current_indicators[column_name]['func'] = self.vwap
+
+        typical_price = (self._frame['high'] + self._frame['low'] + self._frame['close']) / 3
+        self._frame[column_name] = (typical_price * self._frame['volume']).cumsum() / self._frame['volume'].cumsum()
+
+        return self._frame
+
+    def ichimoku_cloud(
+        self,
+        tenkan_period: int = 9,
+        kijun_period: int = 26,
+        senkou_b_period: int = 52,
+        column_prefix: str = 'ichimoku',
+    ) -> pd.DataFrame:
+        """Calculates the Ichimoku Cloud.
+
+        Arguments:
+        ----
+        tenkan_period {int} -- Tenkan-sen (conversion line) period. (default: {9})
+        kijun_period {int} -- Kijun-sen (base line) period. (default: {26})
+        senkou_b_period {int} -- Senkou Span B period. (default: {52})
+
+        Returns:
+        ----
+        {pd.DataFrame} -- A data frame with Ichimoku Cloud indicators.
+        """
+        locals_data = locals()
+        del locals_data['self']
+
+        self._current_indicators[column_prefix] = {}
+        self._current_indicators[column_prefix]['args'] = locals_data
+        self._current_indicators[column_prefix]['func'] = self.ichimoku_cloud
+
+        high = self._frame['high']
+        low = self._frame['low']
+
+        tenkan_sen = (high.rolling(window=tenkan_period).max() + low.rolling(window=tenkan_period).min()) / 2
+        kijun_sen = (high.rolling(window=kijun_period).max() + low.rolling(window=kijun_period).min()) / 2
+
+        senkou_a = ((tenkan_sen + kijun_sen) / 2).shift(kijun_period)
+        senkou_b = ((high.rolling(window=senkou_b_period).max() + low.rolling(window=senkou_b_period).min()) / 2).shift(kijun_period)
+
+        chikou_span = self._frame['close'].shift(-kijun_period)
+
+        self._frame[f'{column_prefix}_tenkan'] = tenkan_sen
+        self._frame[f'{column_prefix}_kijun'] = kijun_sen
+        self._frame[f'{column_prefix}_senkou_a'] = senkou_a
+        self._frame[f'{column_prefix}_senkou_b'] = senkou_b
+        self._frame[f'{column_prefix}_chikou'] = chikou_span
+
+        return self._frame
+
+    def obv(self, column_name: str = 'obv') -> pd.DataFrame:
+        """Calculates the On-Balance Volume (OBV).
+
+        Returns:
+        ----
+        {pd.DataFrame} -- A data frame with the OBV indicator included.
+        """
+        locals_data = locals()
+        del locals_data['self']
+
+        self._current_indicators[column_name] = {}
+        self._current_indicators[column_name]['args'] = locals_data
+        self._current_indicators[column_name]['func'] = self.obv
+
+        direction = self._frame['close'].diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+        self._frame[column_name] = (direction * self._frame['volume']).cumsum()
+
+        return self._frame
 
     def check_signals(self) -> Union[pd.DataFrame, None]:
         """Checks to see if any signals have been generated.

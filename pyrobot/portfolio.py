@@ -4,10 +4,10 @@ from pandas import DataFrame
 from typing import Tuple
 from typing import List
 from typing import Optional
+from typing import Any
 
 
 from pyrobot.stock_frame import StockFrame
-from td.client import TDClient
 
 
 class Portfolio():
@@ -30,7 +30,7 @@ class Portfolio():
 
         self._historical_prices = []
 
-        self._td_client: TDClient = None
+        self._broker: Any = None
         self._stock_frame: StockFrame = None
         self._stock_frame_daily: StockFrame = None
 
@@ -215,6 +215,8 @@ class Portfolio():
             for symbol in self.positions:
                 total_allocation[self.positions[symbol]['asset_type']].append(self.positions[symbol])
 
+        return total_allocation
+
     def portfolio_variance(self, weights: dict, covariance_matrix: DataFrame) -> dict:
 
         sorted_keys = list(weights.keys())
@@ -323,7 +325,7 @@ class Portfolio():
         symbols = self.positions.keys()
 
         # Grab the quotes.
-        quotes = self.td_client.get_quotes(instruments=list(symbols))
+        quotes = self._broker.get_quotes(symbols=list(symbols))
 
         # Grab the projected market value.
         projected_market_value_dict = self.projected_market_value(
@@ -347,7 +349,7 @@ class Portfolio():
         symbols = self.positions.keys()
 
         # Grab the quotes.
-        quotes = self.td_client.get_quotes(instruments=list(symbols))
+        quotes = self._broker.get_quotes(symbols=list(symbols))
 
         portfolio_summary_dict = {}
         portfolio_summary_dict['projected_market_value'] = self.projected_market_value(
@@ -601,26 +603,26 @@ class Portfolio():
         self._stock_frame = stock_frame
 
     @property
-    def td_client(self) -> TDClient:
-        """Gets the TDClient object for the Portfolio
+    def broker(self) -> Any:
+        """Gets the broker object for the Portfolio.
 
         Returns:
         ----
-        {TDClient} -- An authenticated session with the TD API.
+        {BrokerInterface} -- A broker adapter instance.
         """
 
-        return self._td_client
+        return self._broker
 
-    @td_client.setter
-    def td_client(self, td_client: TDClient) -> None:
-        """Sets the TDClient object for the Portfolio
+    @broker.setter
+    def broker(self, broker: Any) -> None:
+        """Sets the broker object for the Portfolio.
 
         Arguments:
         ----
-        td_client {TDClient} -- An authenticated session with the TD API.
+        broker {BrokerInterface} -- A broker adapter instance.
         """
 
-        self._td_client: TDClient = td_client
+        self._broker = broker
 
     def _grab_daily_historical_prices(self) -> StockFrame:
         """Grabs the daily historical prices for each position.
@@ -632,31 +634,25 @@ class Portfolio():
 
         new_prices = []
 
+        from datetime import datetime, timedelta
+
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365)
+
         # Loop through each position.
         for symbol in self.positions:
 
-            # Grab the historical prices.
-            historical_prices_response = self.td_client.get_price_history(
+            # Grab the historical prices (returns list of normalized dicts).
+            candles = self._broker.get_historical_prices(
                 symbol=symbol,
-                period_type='year',
-                period=1,
-                frequency_type='daily',
-                frequency=1,
-                extended_hours=True
+                start=start_date,
+                end=end_date,
+                bar_size=1,
+                bar_type='daily'
             )
 
-            # Loop through the chandles.
-            for candle in historical_prices_response['candles']:
-
-                new_price_mini_dict = {}
-                new_price_mini_dict['symbol'] = symbol
-                new_price_mini_dict['open'] = candle['open']
-                new_price_mini_dict['close'] = candle['close']
-                new_price_mini_dict['high'] = candle['high']
-                new_price_mini_dict['low'] = candle['low']
-                new_price_mini_dict['volume'] = candle['volume']
-                new_price_mini_dict['datetime'] = candle['datetime']
-                new_prices.append(new_price_mini_dict)
+            for candle in candles:
+                new_prices.append(candle)
 
         # Create and set the StockFrame
         self._stock_frame_daily = StockFrame(data=new_prices)

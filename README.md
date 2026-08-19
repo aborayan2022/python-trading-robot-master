@@ -3,119 +3,176 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [What's New in v0.2.0](#whats-new-in-v020)
 - [Setup](#setup)
-- [Usage](#usage)
-- [Support These Projects](#support-these-projects)
+- [Quickstart](#quickstart)
+- [Supported Brokers](#supported-brokers)
+- [Architecture](#architecture)
+- [Backtesting](#backtesting)
+- [Indicators](#indicators)
 
 ## Overview
 
-Current Version: **0.1.1**
+A trading robot written in Python that can run automated strategies using technical analysis. The robot supports multiple brokers through a unified abstraction layer.
 
-A trading robot written in Python that can run automated strategies using a technical analysis.
-The robot is designed to mimic a few common scenarios:
+**Core objects:**
 
-1. Maintaining a portfolio of multiple instruments. The `Portfolio` object will be able
-   to calculate common risk metrics related to a portfolio and give real-time feedback
-   as you trade.
+- **Portfolio** — Tracks positions, calculates risk metrics (variance, allocation, Sharpe), and projects market values in real-time.
+- **Trade** — Defines orders (market, limit, stop, bracket) with legs, stop losses, and take profits.
+- **StockFrame** — Real-time multi-index DataFrame storing historical and live OHLCV data.
+- **Indicators** — Calculates technical indicators (RSI, Bollinger Bands, Stochastic, CCI, KST, ADX, VWAP, Ichimoku Cloud, OBV, and more).
 
-2. Define an order that can be used to trade a financial instrument. With the `Trade` object,
-   you can define simple or even complex orders using Python. These orders will also help similify
-   common scenarios like defining both a take profit and stop loss at the same time.
+## What's New in v0.2.0
 
-3. A real-time data table that includes both historical and real-time prices as they change. The
-   `StockFrame` will make the process of storing your data easy and quick. Additionally, it will be
-   setup so that way you can easily select your financial data as it comes in and do further analysis
-   if needed.
-
-4. Define and calculate indicators using both historical and real-time prices. The `Indicator` object
-   will help you easily define the input of your indicators, calculate them, and then update their values
-   as new prices come.
+- **Broker abstraction layer** — Switch brokers by changing one line of code
+- **Paper trading simulator** — Test strategies with no broker account
+- **Backtesting engine** — Run strategies against historical data with Sharpe, Sortino, max drawdown metrics
+- **Custom exception hierarchy** — `BrokerError`, `AuthenticationError`, `OrderRejectedError`, etc.
+- **Centralized logging** — Replace all `print()` with proper Python logging
+- **Bug fixes** — Bollinger Bands, Stochastic Oscillator, CCI, KST, signal execution logic
+- **Modern Python** — `pyproject.toml`, Python >=3.10, type hints throughout
 
 ## Setup
 
-**Setup - Local Install:**
-
-If you are planning to make modifications to this project or you would like to access it
-before it has been indexed on `PyPi`. I would recommend you either install this project
-in `editable` mode or do a `local install`. For those of you, who want to make modifications
-to this project. I would recommend you install the library in `editable` mode.
-
-If you want to install the library in `editable` mode, make sure to run the `setup.py`
-file, so you can install any dependencies you may need. To run the `setup.py` file,
-run the following command in your terminal.
-
-```console
+```bash
+# Core only (paper trading + backtesting)
 pip install -e .
+
+# With a specific broker
+pip install -e ".[alpaca]"
+pip install -e ".[schwab]"
+pip install -e ".[ibkr]"
+
+# Development
+pip install -e ".[dev]"
 ```
 
-If you don't plan to make any modifications to the project but still want to use it across
-your different projects, then do a local install.
+## Quickstart
 
-```console
-pip install .
-```
-
-This will install all the dependencies listed in the `setup.py` file. Once done
-you can use the library wherever you want.
-
-**Setup - PyPi Install:**
-
-The project can be found at PyPI, if you'd like to view the project please use this
-[link](https://pypi.org/project/python-trading-robot/). To **install** the library,
-run the following command from the terminal.
-
-```bash
-pip install python-trading-robot
-```
-
-**Setup - PyPi Upgrade:**
-
-To **upgrade** the library, run the following command from the terminal.
-
-```bash
-pip install --upgrade python-trading-robot
-```
-
-## Usage
-
-To run the robot, you will need to provide a few pieces of information from your TD Ameritrade Developer account.
-The following items are need for authentication:
-
-- Client ID: Also, called your consumer key, this was provided when you registered an app with the TD Ameritrade
-  Developer platform. An example of a client ID could look like the following `MMMMYYYYYA6444VXXXXBBJC3DOOOO`.
-
-- Redirect URI: Also called the callbakc URL or redirect URL, this was specified by you when you regiestered your app with
-  the TD Ameritrade Developer platform. Here is an example of a redirect URI <https://localhost/mycallback>
-
-- Credentials Path: This is a file path that will point to a JSON file where your state info will be saved. Keep in mind
-  that it is okay if it points to a non-existing file as once you run the script the file will be auto generated. For example,
-  if I want my state info to be saved to my desktop, then it would look like the following: `C:\Users\Desktop\ts_state.json`
-
-Once you've identfied those pieces of info, you can run the robot. Here is a simple example that will create a new instance
-of it:
+### Paper Trading (No Broker Account)
 
 ```python
+from pyrobot.brokers import create_broker
 from pyrobot.robot import PyRobot
 
-# Initialize the robot
-trading_robot = PyRobot(
-    client_id='XXXXXX111111YYYY22',
-    redirect_uri='https://localhost/mycallback',
-    credentials_path='path/to/td_state.json'
+broker = create_broker('paper')
+broker.authenticate()
+
+robot = PyRobot(broker=broker)
+robot.create_portfolio()
+
+# Add positions
+robot.portfolio.add_position(symbol='MSFT', quantity=10, asset_type='equity')
+
+# Create a trade
+trade = robot.create_trade(
+    trade_id='long_msft',
+    enter_or_exit='enter',
+    long_or_short='long',
+    order_type='mkt'
 )
+trade.instrument(symbol='MSFT', quantity=5, asset_type='EQUITY')
 ```
 
-For more detailed examples, go to the `trading_robot.py` file to see an example of how to use the library along with all
-the different objects inside.
+### Live Trading (Alpaca Example)
 
-## Support these Projects
+```python
+from pyrobot.brokers import create_broker
 
-**Patreon:**
-Help support this project and future projects by donating to my [Patreon Page](https://www.patreon.com/sigmacoding). I'm always
-looking to add more content for individuals like yourself, unfortuantely some of the APIs I would require me to pay monthly fees.
+broker = create_broker(
+    'alpaca',
+    api_key='YOUR_API_KEY',
+    secret_key='YOUR_SECRET_KEY',
+    paper=True  # Set False for live
+)
+broker.authenticate()
 
-**YouTube:**
-If you'd like to watch more of my content, feel free to visit my YouTube channel [Sigma Coding](https://www.youtube.com/c/SigmaCoding).
+quotes = broker.get_quotes(['MSFT', 'AAPL'])
+print(quotes)
+```
 
-<!-- **Hire Me:**
-If you have a project, you think I can help you with feel free to reach out at [coding.sigma@gmail.com](mailto:coding.sigma@gmail.com?subject=[GitHub]%20Project%20Proposal) or fill out the [contract request form](https://forms.office.com/Pages/ResponsePage.aspx?id=ZwOBErInsUGliXx0Yo2VfcCSWZSwW25Es3vPV2veU0pUMUs5MUc2STkzSzVQMFNDVlI5NjJVNjREUi4u) -->
+### Live Trading (Schwab Example)
+
+```python
+from pyrobot.brokers import create_broker
+
+broker = create_broker(
+    'schwab',
+    client_id='YOUR_CLIENT_ID',
+    redirect_uri='https://localhost/callback',
+    credentials_path='path/to/tokens.json'
+)
+broker.authenticate()
+```
+
+## Supported Brokers
+
+| Broker | Package | Auth Method | Paper Trading |
+|--------|---------|-------------|---------------|
+| Paper | (built-in) | None needed | Built-in simulator |
+| Alpaca | `alpaca-py` | API key + secret | Yes |
+| Schwab | `schwab-py` | OAuth 2.0 | No |
+| IBKR | `ib_insync` | TWS/Gateway | No |
+
+## Architecture
+
+```
+pyrobot/
+├── brokers/
+│   ├── base.py              # BrokerInterface ABC
+│   ├── paper_broker.py      # Local simulator
+│   ├── alpaca_broker.py     # Alpaca adapter
+│   ├── schwab_broker.py     # Charles Schwab adapter
+│   └── ibkr_broker.py       # Interactive Brokers adapter
+├── backtesting/
+│   └── engine.py            # BacktestEngine + BacktestResult
+├── robot.py                 # Main PyRobot class
+├── indicators.py            # Technical indicators
+├── stock_frame.py           # Multi-index price DataFrame
+├── trades.py                # Trade/order management
+├── portfolio.py             # Portfolio tracking
+├── exceptions.py            # Custom exceptions
+└── logging_config.py        # Centralized logging
+```
+
+## Backtesting
+
+```python
+from pyrobot.backtesting.engine import BacktestEngine
+
+engine = BacktestEngine(
+    initial_balance=100_000,
+    historical_data=your_price_data,  # List of dicts with symbol,open,close,high,low,volume,datetime
+    commission_per_trade=1.0,
+    slippage_pct=0.001,
+)
+
+def golden_cross(stock_frame, indicator_client):
+    """Buy when 50-SMA crosses above 200-SMA."""
+    # ... indicator logic ...
+    return "buy"  # or "sell" or None
+
+result = engine.run(strategy=golden_cross)
+print(result.summary())
+# {'total_return_pct': 5.23, 'sharpe_ratio': 1.45, 'max_drawdown_pct': -3.21, ...}
+```
+
+## Indicators
+
+```python
+from pyrobot.indicators import Indicators
+
+indicators = Indicators(price_data_frame=stock_frame)
+
+indicators.rsi(period=14)
+indicators.bollinger_bands(period=20)
+indicators.stochastic_oscillator()
+indicators.sma(period=200)
+indicators.ema(period=50)
+indicators.adx()
+indicators.vwap()
+indicators.obv()
+indicators.ichimoku_cloud()
+indicators.cci()
+indicators.kst()
+```

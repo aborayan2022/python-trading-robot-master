@@ -1,197 +1,135 @@
-"""Unit test module for the Trade Object.
+"""Tests for the Trade class."""
 
-Will perform an instance test to make sure it creates it. Additionally,
-it will test different properties and methods of the object.
-"""
+import pytest
 
-import unittest
-from unittest import TestCase
-from configparser import ConfigParser
-
-from pyrobot.robot import PyRobot
 from pyrobot.trades import Trade
 
 
-class PyRobotTradeTest(TestCase):
+class TestTrade:
+    """Tests for Trade object creation and manipulation."""
 
-    """Will perform a unit test for the Trade object."""
-
-    def setUp(self) -> None:
-        """Set up the Trade Object."""
-
-        # Grab configuration values.
-        config = ConfigParser()
-        config.read('configs/config.ini')       
-
-        CLIENT_ID = config.get('main', 'CLIENT_ID')
-        REDIRECT_URI = config.get('main', 'REDIRECT_URI')
-        CREDENTIALS_PATH = config.get('main', 'JSON_PATH')
-        self.ACCOUNT_NUMBER = config.get('main', 'ACCOUNT_NUMBER')
-
-        # Create a new instance of a robot.
-        self.robot = PyRobot(
-            client_id = CLIENT_ID, 
-            redirect_uri = REDIRECT_URI, 
-            credentials_path = CREDENTIALS_PATH
+    def test_new_trade_market(self):
+        trade = Trade()
+        order = trade.new_trade(
+            trade_id="test_1",
+            order_type="mkt",
+            side="long",
+            enter_or_exit="enter",
         )
+        assert order["orderType"] == "MARKET"
+        assert order["orderLegCollection"][0]["instruction"] == "BUY"
 
-    def test_create_new_market_order(self):
-        """Create a new market order."""
-
-        # Create a new Trade Object.
-        new_trade = self.robot.create_trade(
-            trade_id='test_1',
-            enter_or_exit='enter',
-            long_or_short='short',
-            order_type='mkt'
+    def test_new_trade_limit(self):
+        trade = Trade()
+        order = trade.new_trade(
+            trade_id="test_2",
+            order_type="lmt",
+            side="long",
+            enter_or_exit="enter",
+            price=150.00,
         )
+        assert order["orderType"] == "LIMIT"
+        assert order["price"] == 150.00
 
-        self.assertIsInstance(new_trade, Trade)
-        self.assertEqual(new_trade.order_type, 'mkt')
-
-    def test_create_new_limit_order(self):
-        """Create a new limit order."""
-
-        # Create a new Trade Object.
-        new_trade = self.robot.create_trade(
-            trade_id='test_1',
-            enter_or_exit='enter',
-            long_or_short='short',
-            order_type='lmt'
+    def test_new_trade_stop(self):
+        trade = Trade()
+        order = trade.new_trade(
+            trade_id="test_3",
+            order_type="stop",
+            side="long",
+            enter_or_exit="enter",
+            price=140.00,
         )
+        assert order["orderType"] == "STOP"
+        assert order["stopPrice"] == 140.00
 
-        self.assertIsInstance(new_trade, Trade)
-        self.assertEqual(new_trade.order_type, 'lmt')
-
-    def test_create_new_stop_order(self):
-        """Create a new stop order."""
-
-        # Create a new Trade Object.
-        new_trade = self.robot.create_trade(
-            trade_id='test_1',
-            enter_or_exit='enter',
-            long_or_short='short',
-            order_type='stop'
+    def test_instrument(self):
+        trade = Trade()
+        trade.new_trade(
+            trade_id="test_4",
+            order_type="mkt",
+            side="long",
+            enter_or_exit="enter",
         )
+        leg = trade.instrument(symbol="MSFT", quantity=10, asset_type="EQUITY")
+        assert leg["instrument"]["symbol"] == "MSFT"
+        assert leg["quantity"] == 10
 
-        self.assertIsInstance(new_trade, Trade)
-        self.assertEqual(new_trade.order_type, 'stop')
-    
-    def test_add_instrument(self):
-        """Tests adding an instrument to an order after creating it."""
-
-        # Create a new Trade Object.
-        new_trade = self.robot.create_trade(
-            trade_id='test_1',
-            enter_or_exit='enter',
-            long_or_short='long',
-            order_type='lmt',
-            price=12.00
+    def test_add_leg_fix(self):
+        trade = Trade()
+        trade.new_trade(
+            trade_id="test_5",
+            order_type="mkt",
+            side="long",
+            enter_or_exit="enter",
         )
-
-        # Define the Order Leg it should be.
-        order_leg = {
-            "instruction": 'BUY',
-            "quantity": 2,
-            "instrument": {
-                "symbol": 'MSFT',
-                "assetType": 'EQUITY'
-            }
-        }
-        
-        # Add an instrument to the Trade.
-        new_trade.instrument(symbol='MSFT', quantity=2, asset_type='EQUITY')
-        self.assertDictEqual(new_trade.order['orderLegCollection'][0], order_leg)
-
-    def test_add_stop_loss_percentage(self):
-        """Tests adding a stop Loss Order to an exisiting Limit Order."""
-        
-        # Create a new Trade Object.
-        new_trade = self.robot.create_trade(
-            trade_id='test_1',
-            enter_or_exit='enter',
-            long_or_short='long',
-            order_type='lmt',
-            price=12.00
+        trade.instrument(symbol="MSFT", quantity=10, asset_type="EQUITY")
+        legs = trade.add_leg(
+            order_leg_id=1, symbol="AAPL", quantity=5, asset_type="EQUITY"
         )
+        assert len(legs) == 2
+        assert legs[1]["instrument"]["symbol"] == "AAPL"
 
-        # Add a new instrument.
-        new_trade.instrument(symbol='MSFT',quantity=2, asset_type='EQUITY')
-
-        # Add a new percentage Stop Loss.
-        new_trade.add_stop_loss(stop_size=.10, percentage=True)
-
-        stop_loss_order = {
-            "orderType": "STOP",
-            "session": "NORMAL",
-            "duration": "DAY",
-            "stopPrice": 10.8,
-            "orderStrategyType": "SINGLE",
-            "orderLegCollection": [
-                {
-                    "instruction": 'SELL',
-                    "quantity": 2,
-                    "instrument": {
-                        "symbol": 'MSFT',
-                        "assetType": 'EQUITY'
-                    }
-                }
-            ]
-        }
-
-        self.assertEqual(new_trade.order_type, 'lmt')
-        self.assertIn('childOrderStrategies', new_trade.order)
-        self.assertDictEqual(new_trade.stop_loss_order, stop_loss_order)
-
-    def test_add_stop_loss_dollar(self):
-        """Tests adding a stop Loss Order to an exisiting Limit Order."""
-        
-        # Create a new Trade Object.
-        new_trade = self.robot.create_trade(
-            trade_id='test_1',
-            enter_or_exit='enter',
-            long_or_short='long',
-            order_type='lmt',
-            price=12.00
+    def test_repr(self):
+        trade = Trade()
+        trade.new_trade(
+            trade_id="test_6",
+            order_type="mkt",
+            side="long",
+            enter_or_exit="enter",
         )
+        trade.instrument(symbol="MSFT", quantity=10, asset_type="EQUITY")
+        r = repr(trade)
+        assert "MSFT" in r
+        assert "long" in r
 
-        # Add a new instrument.
-        new_trade.instrument(symbol='MSFT', quantity=2, asset_type='EQUITY')
+    def test_generate_order_id(self):
+        trade = Trade()
+        trade.new_trade(
+            trade_id="test_7",
+            order_type="mkt",
+            side="long",
+            enter_or_exit="enter",
+        )
+        trade.instrument(symbol="MSFT", quantity=10, asset_type="EQUITY")
+        order_id = trade._generate_order_id()
+        assert "MSFT" in order_id
+        assert "long" in order_id
 
-        # Add a new stop Loss.
-        new_trade.add_stop_loss(stop_size=.10, percentage=False)
+    def test_convert_to_trigger(self):
+        trade = Trade()
+        trade.new_trade(
+            trade_id="test_8",
+            order_type="mkt",
+            side="long",
+            enter_or_exit="enter",
+        )
+        trade.instrument(symbol="MSFT", quantity=10, asset_type="EQUITY")
+        trade._convert_to_trigger()
+        assert trade._triggered_added is True
+        assert trade.order["orderStrategyType"] == "TRIGGER"
+        assert "childOrderStrategies" in trade.order
 
-        stop_loss_order = {
-            "orderType": "STOP",
-            "session": "NORMAL",
-            "duration": "DAY",
-            "stopPrice": 11.90,
-            "orderStrategyType": "SINGLE",
-            "orderLegCollection": [
-                {
-                    "instruction": 'SELL',
-                    "quantity": 2,
-                    "instrument": {
-                        "symbol": 'MSFT',
-                        "assetType": 'EQUITY'
-                    }
-                }
-            ]
-        }
+    def test_stop_loss_order_type(self):
+        trade = Trade()
+        trade.new_trade(
+            trade_id="test_9",
+            order_type="stop",
+            side="long",
+            enter_or_exit="enter",
+            price=140.0,
+        )
+        assert trade.is_stop_order is True
+        assert trade.is_limit_order is False
 
-        self.assertEqual(new_trade.order_type, 'lmt')
-        self.assertIn('childOrderStrategies', new_trade.order)
-        self.assertDictEqual(new_trade.stop_loss_order, stop_loss_order)
-
-    # def test_price_calculation(self):
-    #     """Tests calculating the new price for Stop Orders."""
-
-    #     new_price = Trade()._calculate_new_price(price=12.00,adjustment=.1, percentage=True)
-
-    def tearDown(self) -> None:
-        """Teardown the Robot."""
-
-        self.robot = None
-
-if __name__ == '__main__':
-    unittest.main()
+    def test_limit_order_type(self):
+        trade = Trade()
+        trade.new_trade(
+            trade_id="test_10",
+            order_type="lmt",
+            side="long",
+            enter_or_exit="enter",
+            price=150.0,
+        )
+        assert trade.is_limit_order is True
+        assert trade.is_stop_order is False

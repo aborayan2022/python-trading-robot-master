@@ -3,8 +3,7 @@ from datetime import datetime
 
 from typing import List
 from typing import Dict
-
-from td.client import TDClient
+from typing import Any
 
 
 class Trade():
@@ -38,7 +37,7 @@ class Trade():
         self._triggered_added = False
         self._multi_leg = False
         self._one_cancels_other = False
-        self._td_client: TDClient = None
+        self._broker: Any = None
     
     def to_dict(self) -> dict:
 
@@ -52,6 +51,20 @@ class Trade():
         obj_dict.update(self.__dict__)
 
         return obj_dict
+
+    def __repr__(self) -> str:
+        symbol = getattr(self, 'symbol', 'N/A')
+        side = getattr(self, 'side', 'N/A')
+        enter_or_exit = getattr(self, 'enter_or_exit', 'N/A')
+        order_type = getattr(self, 'order_type', 'N/A')
+        return (
+            f"Trade(symbol={symbol}, side={side}, "
+            f"action={enter_or_exit}, type={order_type}, "
+            f"status={self.order_status})"
+        )
+
+    def __str__(self) -> str:
+        return self.__repr__()
 
     def new_trade(self, trade_id: str, order_type: str, side: str, enter_or_exit: str, price: float = 0.00, stop_limit_price: float = 0.00) -> dict:
         """Creates a new Trade object template.
@@ -514,20 +527,20 @@ class Trade():
         # We need to basis to calculate off of. Use the price.
         if self.order_type == 'mkt':
 
-            quote = self._td_client.get_quotes(instruments=[self.symbol])
+            quote = self._broker.get_quotes(symbols=[self.symbol])
 
             # Have to make a call to Get Quotes.
-            price = quote[self.symbol]['lastPrice']
+            price = quote[self.symbol]['last_price']
 
         elif self.order_type == 'lmt':
             price = self.price
         
         else:
 
-            quote = self._td_client.get_quotes(instruments=[self.symbol])
+            quote = self._broker.get_quotes(symbols=[self.symbol])
 
             # Have to make a call to Get Quotes.
-            price = quote[self.symbol]['lastPrice']
+            price = quote[self.symbol]['last_price']
         
         return round(price, 2)
 
@@ -749,10 +762,13 @@ class Trade():
         """
 
         # Define the leg.
-        leg = {}
-        leg['instrument']['symbol'] = symbol
-        leg['instrument']['assetType'] = asset_type
-        leg['quantity'] = quantity
+        leg = {
+            'instrument': {
+                'symbol': symbol,
+                'assetType': asset_type,
+            },
+            'quantity': quantity,
+        }
 
         if sub_asset_type:
             leg['instrument']['subAssetType'] = sub_asset_type
@@ -880,17 +896,17 @@ class Trade():
         self.order_status = "QUEUED"
     
     def _update_order_status(self) -> None:
-        """Updates the current order status, to reflect what's on TD."""        
+        """Updates the current order status via the broker."""        
 
-        if self.order_id != "":
+        if self.order_id != "" and self._broker is not None:
 
-            order_response = self._td_client.get_orders(
+            order_response = self._broker.get_order_status(
                 account=self.account,
                 order_id=self.order_id
             )
 
             self.order_response = order_response
-            self.order_status = self.order_response['status']
+            self.order_status = self.order_response.get('status', 'UNKNOWN')
     
     def check_status(self) -> object:
         """Used to easily identify the order status.
@@ -909,6 +925,9 @@ class Trade():
     def update_children(self) -> None:
         """Updates the Price info of the children info."""        
 
+        if self._broker is None:
+            return
+
         # Grab the children.
         children = self.order['childOrderStrategies'][0]['childOrderStrategies']
 
@@ -916,8 +935,8 @@ class Trade():
         for order in children:
             
             # Get the latest price.
-            quote = self._td_client.get_quotes(instruments=[self.symbol])
-            last_price = quote[self.symbol]['lastPrice']
+            quote = self._broker.get_quotes(symbols=[self.symbol])
+            last_price = quote[self.symbol]['last_price']
             
             # Update the price.
             if order['orderType'] == 'STOP':

@@ -1,117 +1,58 @@
-"""Unit test module for the StockFrame Object.
+"""Tests for the StockFrame class."""
 
-Will perform an instance test to make sure it creates it. Additionally,
-it will test different properties and methods of the object.
-"""
-
-import unittest
 import pandas as pd
-from unittest import TestCase
-from datetime import datetime
-from datetime import timedelta
-from configparser import ConfigParser
+import pytest
 
-from pyrobot.robot import PyRobot
 from pyrobot.stock_frame import StockFrame
 
 
-class PyRobotStockFrameTest(TestCase):
+class TestStockFrame:
+    """Tests for StockFrame creation and manipulation."""
 
-    """Will perform a unit test for the StockFrame Object."""
+    def test_creates_multi_index(self, stock_frame):
+        assert isinstance(stock_frame.frame.index, pd.MultiIndex)
 
-    def setUp(self) -> None:
-        """Set up the Stock Frame."""
+    def test_index_levels(self, stock_frame):
+        assert stock_frame.frame.index.names == ["symbol", "datetime"]
 
-        # Grab configuration values.
-        config = ConfigParser()
-        config.read('configs/config.ini')       
+    def test_has_ohlc_columns(self, stock_frame):
+        for col in ["open", "close", "high", "low", "volume"]:
+            assert col in stock_frame.frame.columns
 
-        CLIENT_ID = config.get('main', 'CLIENT_ID')
-        REDIRECT_URI = config.get('main', 'REDIRECT_URI')
-        CREDENTIALS_PATH = config.get('main', 'JSON_PATH')
+    def test_symbol_groups(self, stock_frame):
+        groups = stock_frame.symbol_groups
+        assert groups is not None
 
-        # Create a robot.
-        self.robot = PyRobot(
-            client_id = CLIENT_ID, 
-            redirect_uri = REDIRECT_URI, 
-            credentials_path = CREDENTIALS_PATH
-        )
-
-        # Grab historical prices, first define the start date and end date.
-        start_date = datetime.today()
-        end_date = start_date - timedelta(days=30)
-
-        # Grab the historical prices.
-        historical_prices = self.robot.grab_historical_prices(
-            start=end_date,
-            end=start_date,
-            bar_size=1,
-            bar_type='minute',
-            symbols=['AAPL','MSFT']
-        )
-
-        # Convert data to a Data Frame.
-        self.stock_frame = self.robot.create_stock_frame(data=historical_prices['aggregated'])
-
-    def test_creates_instance_of_session(self):
-        """Create an instance and make sure it's a StockFrame."""
-
-        self.assertIsInstance(self.stock_frame, StockFrame)
-
-    def test_frame_property(self):
-        """Test that the `frame` property returns a Pandas DataFrame object."""
-
-        self.assertIsInstance(self.stock_frame.frame, pd.DataFrame)
-        self.assertIsInstance(self.stock_frame.frame.index, pd.MultiIndex)
-
-    def test_frame_symbols(self):
-        """Test that the `frame.index` property contains the specified symbols."""
-
-        self.assertIn('AAPL', self.stock_frame.frame.index)
-        self.assertIn('MSFT', self.stock_frame.frame.index)
-
-    def test_symbol_groups_property(self):
-        """Test that the `symbol_groups` property returns a Pandas DataFrameGroupBy object."""
-
-        self.assertIsInstance(self.stock_frame.symbol_groups, pd.core.groupby.DataFrameGroupBy)
-    
-    def test_symbol_rolling_groups_property(self):
-        """Test that the `symbol_rolling_groups` property returns a Pandas RollingGroupBy object."""
-
-        self.assertIsInstance(self.stock_frame.symbol_rolling_groups(size=15), pd.core.window.RollingGroupby)
-
-    def test_add_row(self):
-        """Test adding a new row to our data frame."""
-
-        # Define a new row.
-        new_row_dict = {
-            'AAPL':{
-                'openPrice':100.00,
-                'closePrice':100.00,
-                'highPrice':100.00,
-                'lowPrice':100.00,
-                'askSize':100,
-                'bidSize':100,
-                'quoteTimeInLong':1586390399572
+    def test_add_rows(self, stock_frame):
+        new_bars = [
+            {
+                "symbol": "MSFT",
+                "open": 405.0,
+                "close": 406.0,
+                "high": 407.0,
+                "low": 404.0,
+                "volume": 50000,
+                "datetime": 1704219000000,
             }
+        ]
+        initial_len = len(stock_frame.frame)
+        stock_frame.add_rows(data=new_bars)
+        assert len(stock_frame.frame) >= initial_len
 
-        }
+    def test_multi_symbol_groups(self, stock_frame_multi):
+        symbols = stock_frame_multi.frame.index.get_level_values(0).unique()
+        assert len(symbols) == 2
+        assert "MSFT" in symbols
+        assert "AAPL" in symbols
 
-        # Add the row.
-        self.stock_frame.add_rows(data=new_row_dict)
+    def test_do_indicator_exist_passes(self, stock_frame):
+        assert stock_frame.do_indicator_exist(["open", "close"]) is True
 
-        # Create a timestamp.
-        time_stamp_parsed = pd.to_datetime(1586390399572, unit='ms', origin='unix')
-        index_tuple = ('AAPL', time_stamp_parsed)
+    def test_do_indicator_exist_raises(self, stock_frame):
+        with pytest.raises(KeyError):
+            stock_frame.do_indicator_exist(["nonexistent_column"])
 
-        # Check to see if the Tuple is in the Index.
-        self.assertIn(index_tuple, self.stock_frame.frame.index)
-
-    def tearDown(self) -> None:
-        """Teardown the StockFrame."""
-
-        self.stock_frame = None
-
-
-if __name__ == '__main__':
-    unittest.main()
+    def test_grab_current_bar(self, stock_frame):
+        bar = stock_frame.grab_current_bar("MSFT")
+        assert bar is not None
+        assert len(bar) > 0

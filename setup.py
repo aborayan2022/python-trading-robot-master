@@ -1,5 +1,14 @@
 from setuptools import setup
 from setuptools import find_namespace_packages
+import warnings
+
+warnings.warn(
+    "setup.py is DEPRECATED. Use pyproject.toml instead. "
+    "The td-ameritrade-python-api dependency has been removed. "
+    "See pyproject.toml for new installation instructions.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
 # load the README file.
 with open(file="README.md", mode="r") as fh:

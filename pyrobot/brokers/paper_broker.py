@@ -3,6 +3,7 @@
 import uuid
 
 from datetime import datetime
+from datetime import timezone
 from typing import Dict
 from typing import List
 
@@ -167,7 +168,7 @@ class PaperBroker(BrokerInterface):
             "quantity": quantity,
             "fill_price": fill_price,
             "order_type": order_type,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         self._orders.append(order_record)
         self._order_history.append(order_record)
