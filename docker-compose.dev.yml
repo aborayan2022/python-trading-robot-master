@@ -1,0 +1,26 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: pyrobot-bot-dev
+    env_file: .env
+    environment:
+      - LOG_LEVEL=DEBUG
+      - TRADING_MODE=paper
+    volumes:
+      - .:/app
+      - bot-data:/app/data
+    networks:
+      - trading-net
+    read_only: false
+    command: >
+      python -m pytest tests/ -v --tb=short -x
+
+volumes:
+  bot-data:
+
+networks:
+  trading-net:
+    driver: bridge

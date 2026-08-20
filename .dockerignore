@@ -1,0 +1,43 @@
+# Version control
+.git
+.github
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist/
+build/
+.mypy_cache
+.ruff_cache
+.pytest_cache
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Samples
+samples/
+
+# Documentation
+docs/
+reports/
+*.md
+!README.md
+LICENSE
+
+# Config (mounted at runtime)
+config/
+
+# Data (persistent volume)
+data/orders.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
