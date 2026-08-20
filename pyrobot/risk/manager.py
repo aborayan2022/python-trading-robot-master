@@ -87,6 +87,7 @@ class RiskManager:
         # Daily PnL tracking
         self._daily_realized_pnl: float = 0.0
         self._daily_date: Optional[str] = None
+        self._positions: Dict[str, Dict[str, float]] = {}
 
         self._lock = threading.RLock()
 
@@ -230,23 +231,39 @@ class RiskManager:
         order: Order,
         fill_price: float,
         fill_qty: float,
-    ) -> None:
-        """Record a trade fill and update all risk trackers.
+        commission: float = 0.0,
+    ) -> float:
+        """Record a trade fill, update internal position book, and update all risk trackers.
 
         Args:
             order: The filled Order.
             fill_price: Actual fill price.
             fill_qty: Quantity filled.
+            commission: Optional commission/fees for the fill.
+
+        Returns:
+            Realized PnL from this fill.
         """
         with self._lock:
-            pnl = self._estimate_pnl(order, fill_price, fill_qty)
+            pnl = self._estimate_and_update_pnl(order, fill_price, fill_qty, commission)
             self._daily_realized_pnl += pnl
             self._circuit_breaker.record_trade_result(pnl)
 
             logger.info(
-                "Trade recorded: symbol=%s side=%s qty=%.0f price=%.2f pnl=%.2f",
-                order.symbol, order.side.value, fill_qty, fill_price, pnl,
+                "Trade recorded: symbol=%s side=%s qty=%.0f price=%.2f pnl=%.2f comm=%.2f",
+                order.symbol, order.side.value, fill_qty, fill_price, pnl, commission,
             )
+            return pnl
+
+    def sync_position(self, symbol: str, quantity: float, avg_price: float) -> None:
+        """Explicitly update or synchronize position state in risk tracking."""
+        with self._lock:
+            self._positions[symbol] = {"qty": float(quantity), "avg_price": float(avg_price)}
+
+    def get_tracked_positions(self) -> Dict[str, Dict[str, float]]:
+        """Get copy of currently tracked positions in risk manager."""
+        with self._lock:
+            return {s: dict(p) for s, p in self._positions.items()}
 
     def update_equity(self, equity: float) -> None:
         """Update equity and check drawdown/daily loss limits.
@@ -391,10 +408,76 @@ class RiskManager:
         self._last_order_times[symbol] = datetime.now(timezone.utc)
         return True
 
+    def _estimate_and_update_pnl(
+        self,
+        order: Order,
+        fill_price: float,
+        fill_qty: float,
+        commission: float = 0.0,
+    ) -> float:
+        """Estimate realized PnL from a fill and update the internal position book."""
+        pos = self._positions.get(order.symbol, {"qty": 0.0, "avg_price": 0.0})
+        curr_qty = pos["qty"]
+        curr_avg_price = pos["avg_price"]
+        realized_pnl = -commission
+
+        is_buy = order.side in (OrderSide.BUY, OrderSide.BUY_TO_COVER)
+        is_sell = order.side in (OrderSide.SELL, OrderSide.SELL_SHORT)
+
+        if is_buy:
+            if curr_qty < 0:  # Covering short position
+                closed_qty = min(fill_qty, abs(curr_qty))
+                # Short profit: entry_price - exit_price
+                realized_pnl += closed_qty * (curr_avg_price - fill_price)
+                rem_qty = curr_qty + fill_qty
+                if rem_qty > 0:  # flipped to long
+                    self._positions[order.symbol] = {"qty": rem_qty, "avg_price": fill_price}
+                elif rem_qty == 0:
+                    self._positions[order.symbol] = {"qty": 0.0, "avg_price": 0.0}
+                else:
+                    self._positions[order.symbol] = {"qty": rem_qty, "avg_price": curr_avg_price}
+            else:  # Adding to long position
+                new_qty = curr_qty + fill_qty
+                if new_qty > 0:
+                    new_avg = ((curr_qty * curr_avg_price) + (fill_qty * fill_price)) / new_qty
+                    self._positions[order.symbol] = {"qty": new_qty, "avg_price": new_avg}
+                else:
+                    self._positions[order.symbol] = {"qty": 0.0, "avg_price": 0.0}
+
+        elif is_sell:
+            if curr_qty > 0:  # Closing long position
+                closed_qty = min(fill_qty, curr_qty)
+                # Long profit: exit_price - entry_price
+                realized_pnl += closed_qty * (fill_price - curr_avg_price)
+                rem_qty = curr_qty - fill_qty
+                if rem_qty < 0:  # flipped to short
+                    self._positions[order.symbol] = {"qty": rem_qty, "avg_price": fill_price}
+                elif rem_qty == 0:
+                    self._positions[order.symbol] = {"qty": 0.0, "avg_price": 0.0}
+                else:
+                    self._positions[order.symbol] = {"qty": rem_qty, "avg_price": curr_avg_price}
+            else:  # Adding to short position
+                new_qty = curr_qty - fill_qty
+                if abs(new_qty) > 0:
+                    new_avg = ((abs(curr_qty) * curr_avg_price) + (fill_qty * fill_price)) / abs(new_qty)
+                    self._positions[order.symbol] = {"qty": new_qty, "avg_price": new_avg}
+                else:
+                    self._positions[order.symbol] = {"qty": 0.0, "avg_price": 0.0}
+
+        return realized_pnl
+
     def _estimate_pnl(self, order: Order, fill_price: float, fill_qty: float) -> float:
-        """Estimate PnL from a fill (requires entry price context for closes)."""
-        # Simplified: for new positions, PnL is 0.
-        # Full implementation needs position context.
+        """Estimate PnL from a fill without updating internal state."""
+        pos = self._positions.get(order.symbol, {"qty": 0.0, "avg_price": 0.0})
+        curr_qty = pos["qty"]
+        curr_avg_price = pos["avg_price"]
+
+        if order.side in (OrderSide.BUY, OrderSide.BUY_TO_COVER) and curr_qty < 0:
+            closed_qty = min(fill_qty, abs(curr_qty))
+            return closed_qty * (curr_avg_price - fill_price)
+        elif order.side in (OrderSide.SELL, OrderSide.SELL_SHORT) and curr_qty > 0:
+            closed_qty = min(fill_qty, curr_qty)
+            return closed_qty * (fill_price - curr_avg_price)
         return 0.0
 
     def __repr__(self) -> str:

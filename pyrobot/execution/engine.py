@@ -81,7 +81,9 @@ class ExecutionEngine:
         self._account_id = account_id
         self._max_retries = max_retries
         self._dry_run = dry_run
-        self._risk_manager = risk_manager
+        self._risk_manager = (
+            risk_manager if risk_manager is not None else RiskManager(kill_switch=kill_switch)
+        )
 
         self._submission_count: int = 0
         self._failure_count: int = 0
