@@ -16,12 +16,14 @@ from pyrobot.risk.position_sizer import PositionSizer
 from pyrobot.risk.exposure import ExposureMonitor, ExposureSnapshot
 from pyrobot.risk.drawdown import DrawdownMonitor
 from pyrobot.risk.circuit_breaker import CircuitBreaker, CircuitState
+from pyrobot.risk.decision import RiskDecision
 
 __all__ = [
     "KillSwitch",
     "KillSwitchReason",
     "RiskLimits",
     "RiskManager",
+    "RiskDecision",
     "PositionSizer",
     "ExposureMonitor",
     "ExposureSnapshot",

@@ -50,6 +50,7 @@ from pyrobot.risk.position_sizer import PositionSizer
 from pyrobot.risk.exposure import ExposureMonitor, ExposureSnapshot
 from pyrobot.risk.drawdown import DrawdownMonitor
 from pyrobot.risk.circuit_breaker import CircuitBreaker
+from pyrobot.risk.decision import RiskDecision
 
 logger = get_logger("risk_manager")
 
@@ -93,16 +94,14 @@ class RiskManager:
 
     # ── Pre-trade checks ──────────────────────────────────────────────────────
 
-    def check_order(
+    def evaluate_order(
         self,
         order: Order,
         positions: Dict[str, float],
         prices: Dict[str, float],
         equity: float,
-    ) -> Tuple[bool, str]:
-        """Run all pre-trade risk checks on an order.
-
-        This is the single entry point called by ExecutionEngine.
+    ) -> RiskDecision:
+        """Run all pre-trade risk checks and return a comprehensive RiskDecision.
 
         Args:
             order: The Order to validate.
@@ -111,34 +110,75 @@ class RiskManager:
             equity: Total portfolio equity.
 
         Returns:
-            Tuple of (approved: bool, reason: str).
+            RiskDecision instance with checks passed/failed and metrics snapshot.
 
         Raises:
-            KillSwitchError: If kill switch is active (hard stop).
+            KillSwitchError: If kill switch is active or drawdown breached (hard stop).
         """
         with self._lock:
+            checks_passed: List[str] = []
+            checks_failed: List[str] = []
+
+            # Current metrics snapshot
+            metrics = {
+                "equity": equity,
+                "current_drawdown": self._drawdown_monitor.current_drawdown,
+                "daily_loss_pct": self._drawdown_monitor.daily_loss_pct,
+                "daily_realized_pnl": self._daily_realized_pnl,
+                "circuit_breaker_scale": self._circuit_breaker.position_scale,
+            }
+
             # 1. Kill switch guard (hard stop — always checked first)
             self._kill_switch.guard()
+            checks_passed.append("kill_switch_guard")
 
             # 2. Circuit breaker check
             if self._circuit_breaker.is_open:
-                return False, (
-                    f"Circuit breaker OPEN: {self._circuit_breaker.status}"
+                checks_failed.append("circuit_breaker")
+                return RiskDecision(
+                    approved=False,
+                    reason=f"Circuit breaker OPEN: {self._circuit_breaker.status}",
+                    order_id=order.client_order_id,
+                    symbol=order.symbol,
+                    checks_passed=checks_passed,
+                    checks_failed=checks_failed,
+                    metrics=metrics,
                 )
+            checks_passed.append("circuit_breaker")
 
             # 3. Cooldown after kill switch reset
             if not self._check_cooldown():
-                return False, (
-                    "Cooldown active after kill switch reset. "
-                    f"Wait {self._limits.cooldown_after_kill_switch_seconds}s"
+                checks_failed.append("kill_switch_cooldown")
+                return RiskDecision(
+                    approved=False,
+                    reason=(
+                        "Cooldown active after kill switch reset. "
+                        f"Wait {self._limits.cooldown_after_kill_switch_seconds}s"
+                    ),
+                    order_id=order.client_order_id,
+                    symbol=order.symbol,
+                    checks_passed=checks_passed,
+                    checks_failed=checks_failed,
+                    metrics=metrics,
                 )
+            checks_passed.append("kill_switch_cooldown")
 
             # 4. Order throttle
             if not self._check_order_throttle(order.symbol):
-                return False, (
-                    f"Order throttle: minimum {self._limits.min_order_interval_seconds}s "
-                    f"between orders for {order.symbol}"
+                checks_failed.append("order_throttle")
+                return RiskDecision(
+                    approved=False,
+                    reason=(
+                        f"Order throttle: minimum {self._limits.min_order_interval_seconds}s "
+                        f"between orders for {order.symbol}"
+                    ),
+                    order_id=order.client_order_id,
+                    symbol=order.symbol,
+                    checks_passed=checks_passed,
+                    checks_failed=checks_failed,
+                    metrics=metrics,
                 )
+            checks_passed.append("order_throttle")
 
             # 5. Drawdown check
             if self._drawdown_monitor.is_breached:
@@ -149,6 +189,7 @@ class RiskManager:
                 raise KillSwitchError(
                     f"Max drawdown breached: {self._drawdown_monitor.status()}"
                 )
+            checks_passed.append("max_drawdown")
 
             # 6. Daily loss check
             if self._drawdown_monitor.is_daily_breached:
@@ -160,6 +201,7 @@ class RiskManager:
                     f"Daily loss limit breached: "
                     f"{self._drawdown_monitor.daily_loss_pct:.2%}"
                 )
+            checks_passed.append("daily_loss_limit")
 
             # 7. Exposure check
             side_str = "BUY" if order.side in (OrderSide.BUY, OrderSide.BUY_TO_COVER) else "SELL"
@@ -172,9 +214,48 @@ class RiskManager:
                 account_equity=equity,
             )
             if not exposure_ok:
-                return False, exposure_reason
+                checks_failed.append("exposure_limits")
+                return RiskDecision(
+                    approved=False,
+                    reason=exposure_reason,
+                    order_id=order.client_order_id,
+                    symbol=order.symbol,
+                    checks_passed=checks_passed,
+                    checks_failed=checks_failed,
+                    metrics=metrics,
+                )
+            checks_passed.append("exposure_limits")
 
-            return True, "OK"
+            return RiskDecision(
+                approved=True,
+                reason="OK",
+                order_id=order.client_order_id,
+                symbol=order.symbol,
+                checks_passed=checks_passed,
+                checks_failed=checks_failed,
+                metrics=metrics,
+            )
+
+    def check_order(
+        self,
+        order: Order,
+        positions: Dict[str, float],
+        prices: Dict[str, float],
+        equity: float,
+    ) -> Tuple[bool, str]:
+        """Run all pre-trade risk checks on an order.
+
+        Args:
+            order: The Order to validate.
+            positions: Current positions (symbol → quantity).
+            prices: Current prices (symbol → price).
+            equity: Total portfolio equity.
+
+        Returns:
+            Tuple of (approved: bool, reason: str).
+        """
+        decision = self.evaluate_order(order, positions, prices, equity)
+        return decision.approved, decision.reason
 
     def calculate_position_size(
         self,

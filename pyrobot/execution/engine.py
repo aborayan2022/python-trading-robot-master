@@ -34,6 +34,7 @@ Usage::
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
+from pyrobot.audit.ledger import AuditAction, AuditLedger
 from pyrobot.brokers.base import BrokerInterface
 from pyrobot.exceptions import (
     KillSwitchError,
@@ -47,6 +48,7 @@ from pyrobot.logging_config import get_logger
 from pyrobot.models.order import Order, OrderState, OrderType
 from pyrobot.risk.kill_switch import KillSwitch
 from pyrobot.risk.manager import RiskManager
+from pyrobot.risk.decision import RiskDecision
 from pyrobot.utils.retry import retry, is_retryable_order_error
 
 logger = get_logger("execution_engine")
@@ -63,6 +65,9 @@ class ExecutionEngine:
         max_retries: Maximum retry attempts for transient broker errors.
         dry_run: If True, log orders but do NOT submit to the broker.
             Useful for shadow mode testing.
+        risk_manager: Platform :class:`RiskManager` instance. If None,
+            a default instance will be created with the provided kill_switch.
+        audit_ledger: Platform :class:`AuditLedger` instance for tamper-evident logging.
     """
 
     def __init__(
@@ -74,6 +79,7 @@ class ExecutionEngine:
         max_retries: int = 3,
         dry_run: bool = False,
         risk_manager: RiskManager | None = None,
+        audit_ledger: AuditLedger | None = None,
     ) -> None:
         self._broker = broker
         self._order_manager = order_manager
@@ -84,6 +90,7 @@ class ExecutionEngine:
         self._risk_manager = (
             risk_manager if risk_manager is not None else RiskManager(kill_switch=kill_switch)
         )
+        self._audit_ledger = audit_ledger if audit_ledger is not None else AuditLedger()
 
         self._submission_count: int = 0
         self._failure_count: int = 0
@@ -144,8 +151,15 @@ class ExecutionEngine:
         # ── Step 3: Basic order validation ────────────────────────────────
         self._validate(order)
 
-        # ── Step 4: Risk pre-check hook (placeholder for RiskEngine) ──────
-        self._pre_trade_risk_check(order)
+        # ── Step 4: Risk pre-check hook (mandatory RiskEngine gate) ──────
+        risk_decision = self._pre_trade_risk_check(order)
+        self._audit_ledger.record(
+            action=AuditAction.RISK_EVALUATED,
+            symbol=order.symbol,
+            order_id=order.client_order_id,
+            strategy_id=order.strategy_id,
+            details=risk_decision.to_dict(),
+        )
 
         # ── Step 5: Submit to broker (with retry) ─────────────────────────
         logger.info(
@@ -159,7 +173,15 @@ class ExecutionEngine:
         )
 
         if self._dry_run:
-            return self._dry_run_response(order)
+            res = self._dry_run_response(order)
+            self._audit_ledger.record(
+                action=AuditAction.ORDER_SUBMITTED,
+                symbol=order.symbol,
+                order_id=order.client_order_id,
+                strategy_id=order.strategy_id,
+                details={"dry_run": True, "response": res},
+            )
+            return res
 
         try:
             response = self._submit_with_retry(order)
@@ -169,6 +191,13 @@ class ExecutionEngine:
             self._order_manager.mark_rejected(
                 order.client_order_id,
                 reason=str(exc),
+            )
+            self._audit_ledger.record(
+                action=AuditAction.ORDER_REJECTED,
+                symbol=order.symbol,
+                order_id=order.client_order_id,
+                strategy_id=order.strategy_id,
+                details={"error": str(exc), "permanent": True},
             )
             logger.error(
                 "Order permanently rejected: coid=%s error=%s",
@@ -184,6 +213,13 @@ class ExecutionEngine:
             self._order_manager.mark_unknown(
                 order.client_order_id,
                 reason=f"Exhausted retries: {exc}",
+            )
+            self._audit_ledger.record(
+                action=AuditAction.ORDER_REJECTED,
+                symbol=order.symbol,
+                order_id=order.client_order_id,
+                strategy_id=order.strategy_id,
+                details={"error": str(exc), "state": "UNKNOWN"},
             )
             logger.error(
                 "Order state set to UNKNOWN after retry exhaustion: coid=%s error=%s",
@@ -210,6 +246,19 @@ class ExecutionEngine:
 
         self._submission_count += 1
         self._consecutive_failures = 0  # Reset on success
+
+        self._audit_ledger.record(
+            action=AuditAction.ORDER_SUBMITTED,
+            symbol=order.symbol,
+            order_id=order.client_order_id,
+            strategy_id=order.strategy_id,
+            details={
+                "broker_order_id": broker_order_id,
+                "status": response.get("status"),
+                "quantity": order.quantity,
+                "side": order.side.value,
+            },
+        )
 
         logger.info(
             "Order submitted successfully: coid=%s broker_id=%s status=%s",
@@ -253,31 +302,34 @@ class ExecutionEngine:
                     "but has no valid stop_price."
                 )
 
-    def _pre_trade_risk_check(self, order: Order) -> None:
+    def _pre_trade_risk_check(self, order: Order) -> RiskDecision:
         """Run pre-trade risk validation via the RiskManager.
 
-        If no RiskManager is configured, this is a no-op (backward compatible).
-        If RiskManager rejects the order, raises the appropriate RiskError.
+        Returns:
+            RiskDecision: The evaluation result.
 
         Raises:
-            RiskError: If the risk manager rejects the order.
+            RiskError / ExecutionError: If the risk manager rejects the order.
             KillSwitchError: If drawdown or daily loss limits are breached.
         """
-        if self._risk_manager is None:
-            return
-
-        # RiskManager.check_order will raise KillSwitchError on
-        # drawdown/daily loss breach, or return (False, reason) for soft rejections
-        approved, reason = self._risk_manager.check_order(
+        decision = self._risk_manager.evaluate_order(
             order=order,
             positions=getattr(self, "_risk_positions", {}),
             prices=getattr(self, "_risk_prices", {}),
             equity=getattr(self, "_risk_equity", 0.0),
         )
-        if not approved:
-            raise ExecutionError(
-                f"Risk manager rejected order {order.client_order_id!r}: {reason}"
+        if not decision.approved:
+            self._audit_ledger.record(
+                action=AuditAction.ORDER_REJECTED,
+                symbol=order.symbol,
+                order_id=order.client_order_id,
+                strategy_id=order.strategy_id,
+                details={"reason": decision.reason, "risk_rejection": True},
             )
+            raise ExecutionError(
+                f"Risk manager rejected order {order.client_order_id!r}: {decision.reason}"
+            )
+        return decision
 
     def _submit_with_retry(self, order: Order) -> Dict:
         """Submit the order to the broker, retrying on transient errors.
@@ -339,7 +391,15 @@ class ExecutionEngine:
             "request_body": order.to_legacy_dict(),
         }
 
-    # ── Diagnostics ───────────────────────────────────────────────────────────
+    @property
+    def audit_ledger(self) -> AuditLedger:
+        """Return the audit ledger."""
+        return self._audit_ledger
+
+    @property
+    def risk_manager(self) -> RiskManager:
+        """Return the risk manager."""
+        return self._risk_manager
 
     @property
     def stats(self) -> Dict:
@@ -350,6 +410,7 @@ class ExecutionEngine:
             "consecutive_failures": self._consecutive_failures,
             "kill_switch_active": self._kill_switch.is_active,
             "dry_run": self._dry_run,
+            "audit_events_count": self._audit_ledger.total_events,
         }
         if self._risk_manager is not None:
             result["risk_manager"] = self._risk_manager.status()

@@ -155,3 +155,7 @@ class MarketRegimeDetector(BaseFeatureExtractor):
             volatility_score=float(vol_pct) if not np.isnan(vol_pct) else 0.5,
             recommended_strategy_type=rec_strategy,
         )
+
+    def detect(self, df: pd.DataFrame) -> RegimeState:
+        """Alias for get_current_regime."""
+        return self.get_current_regime(df)

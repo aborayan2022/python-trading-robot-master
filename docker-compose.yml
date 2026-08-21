@@ -44,7 +44,7 @@ services:
       - trading-net
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.3-alpine
     container_name: pyrobot-postgres
     restart: unless-stopped
     environment:
@@ -62,7 +62,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: pyrobot-redis
     restart: unless-stopped
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -77,13 +77,14 @@ services:
       retries: 5
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.1.0
     container_name: pyrobot-grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin_change_in_production}
     volumes:
       - grafana-data:/var/lib/grafana
     networks:
