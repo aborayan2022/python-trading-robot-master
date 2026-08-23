@@ -1,13 +1,10 @@
 """Interactive Brokers adapter using ib_insync/ib_async."""
 
 from datetime import datetime
-from typing import Dict
-from typing import List
+from typing import Dict, List, Optional
 
 from pyrobot.brokers.base import BrokerInterface
-from pyrobot.exceptions import AuthenticationError
-from pyrobot.exceptions import BrokerError
-from pyrobot.exceptions import OrderRejectedError
+from pyrobot.exceptions import AuthenticationError, BrokerError, OrderRejectedError
 from pyrobot.logging_config import get_logger
 
 logger = get_logger("ibkr")
@@ -155,7 +152,7 @@ class IBKRBroker(BrokerInterface):
     def place_order(self, account: str, order: dict) -> dict:
         """Place an order with IBKR."""
         try:
-            from ib_insync import Stock, MarketOrder, LimitOrder, StopOrder
+            from ib_insync import LimitOrder, MarketOrder, Stock, StopOrder
 
             instruction = ""
             quantity = 0
@@ -233,6 +230,48 @@ class IBKRBroker(BrokerInterface):
             raise BrokerError(
                 f"Failed to get order status from IBKR: {e}"
             ) from e
+
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel an open order with IBKR.
+
+        Looks the order up among open trades and cancels it via
+        ib_insync's cancelOrder. Returns False if the order id is not
+        an open order (already filled or unknown).
+        """
+        try:
+            if self._ib is None:
+                raise BrokerError("IBKR not connected; authenticate() first")
+            for trade in self._ib.openTrades():
+                if str(trade.order.orderId) == order_id:
+                    self._ib.cancelOrder(trade.order)
+                    logger.info(f"Cancelled IBKR order {order_id}")
+                    return True
+
+            logger.warning(
+                f"Cancel failed for order {order_id}: not an open order"
+            )
+            return False
+        except Exception as e:
+            raise BrokerError(
+                f"Failed to cancel order {order_id} at IBKR: {e}"
+            ) from e
+
+    def get_open_orders(self, account: Optional[str] = None) -> List[dict]:
+        """Get open orders from IBKR."""
+        try:
+            if self._ib is None:
+                raise BrokerError("IBKR not connected; authenticate() first")
+            return [
+                {
+                    "order_id": str(trade.order.orderId),
+                    "symbol": trade.contract.symbol,
+                    "status": str(trade.orderStatus.status),
+                    "quantity": trade.order.totalQuantity,
+                }
+                for trade in self._ib.openTrades()
+            ]
+        except Exception as e:
+            raise BrokerError(f"Failed to get open orders from IBKR: {e}") from e
 
     def get_account_info(self, account: str = None) -> dict:
         """Get account information from IBKR."""

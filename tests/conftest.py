@@ -1,10 +1,8 @@
 """Shared test fixtures for the pyrobot test suite."""
 
-import operator
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from pyrobot.brokers.paper_broker import PaperBroker

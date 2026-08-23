@@ -1,11 +1,10 @@
 """Market Data Feed abstraction with stale data detection and event publishing."""
 
 import threading
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional
-import pandas as pd
 
-from pyrobot.data.base import Candle, MarketDataProvider, Quote
+from pyrobot.data.base import MarketDataProvider, Quote
 from pyrobot.exceptions import StaleDataError
 from pyrobot.logging_config import get_logger
 

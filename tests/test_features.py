@@ -1,16 +1,16 @@
 """Unit tests for Quantitative Feature Engineering Package."""
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
 from pyrobot.features import (
     FeatureEngine,
+    MarketRegime,
+    MarketRegimeDetector,
+    MomentumFeatures,
     TechnicalFeatures,
     VolatilityFeatures,
-    MomentumFeatures,
-    MarketRegimeDetector,
-    MarketRegime,
 )
 
 

@@ -1,8 +1,9 @@
 """Momentum and Volume-Price Action Feature Extractor."""
 
+from typing import List
+
 import numpy as np
 import pandas as pd
-from typing import List
 
 from pyrobot.features.base import BaseFeatureExtractor, FeatureMetadata
 
@@ -36,7 +37,7 @@ class MomentumFeatures(BaseFeatureExtractor):
     def extract(self, df: pd.DataFrame) -> pd.DataFrame:
         self.validate_input(df)
         res = pd.DataFrame(index=df.index)
-        
+
         close = df["close"]
         volume = df["volume"]
 

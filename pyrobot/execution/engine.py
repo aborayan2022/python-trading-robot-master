@@ -31,25 +31,23 @@ Usage::
     response = engine.submit(order)
 """
 
-from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from pyrobot.audit.ledger import AuditAction, AuditLedger
 from pyrobot.brokers.base import BrokerInterface
 from pyrobot.exceptions import (
-    KillSwitchError,
-    OrderRejectedError,
-    DuplicateOrderError,
-    ExecutionError,
     NON_RETRYABLE_EXCEPTIONS,
+    ExecutionError,
+    KillSwitchError,
 )
 from pyrobot.execution.order_manager import OrderManager
+from pyrobot.execution.reconciliation import _BROKER_STATUS_MAP
 from pyrobot.logging_config import get_logger
 from pyrobot.models.order import Order, OrderState, OrderType
+from pyrobot.risk.decision import RiskDecision
 from pyrobot.risk.kill_switch import KillSwitch
 from pyrobot.risk.manager import RiskManager
-from pyrobot.risk.decision import RiskDecision
-from pyrobot.utils.retry import retry, is_retryable_order_error
+from pyrobot.utils.retry import is_retryable_order_error
 
 logger = get_logger("execution_engine")
 
@@ -138,7 +136,26 @@ class ExecutionEngine:
             ExecutionError: For other execution failures.
         """
         # ── Step 1: Kill switch guard ─────────────────────────────────────
-        self._kill_switch.guard()
+        try:
+            self._kill_switch.guard()
+        except KillSwitchError as exc:
+            self._audit_ledger.record(
+                action=AuditAction.KILL_SWITCH_TRIGGERED,
+                symbol=order.symbol,
+                order_id=order.client_order_id,
+                strategy_id=order.strategy_id,
+                details={
+                    "reason": exc.reason,
+                    "stage": "pre_submit_guard",
+                    "blocked": True,
+                },
+            )
+            logger.critical(
+                "Kill switch blocked order submission: coid=%s reason=%s",
+                order.client_order_id,
+                exc.reason,
+            )
+            raise
 
         # ── Step 2: Validate order state ──────────────────────────────────
         if order.status != OrderState.NEW:
@@ -269,6 +286,211 @@ class ExecutionEngine:
 
         return response
 
+    def cancel_order(self, client_order_id: str) -> bool:
+        """Request cancellation of a working order at the broker.
+
+        Pipeline::
+
+            1. Validate the order exists and is in a cancellable state
+            2. OrderManager.mark_cancel_pending()   ← CANCEL_PENDING
+            3. Broker.cancel_order(broker_order_id)
+            4. On success: mark CANCELLED + audit ORDER_CANCELLED
+               On failure: remain CANCEL_PENDING and raise ExecutionError
+
+        Args:
+            client_order_id: Our internal idempotency key.
+
+        Returns:
+            True if the broker confirmed the cancellation.
+
+        Raises:
+            ExecutionError: If the order is unknown, not yet submitted,
+                already terminal, has no broker_order_id, or the broker
+                fails/refuses the cancellation (order stays CANCEL_PENDING).
+        """
+        order = self._order_manager.get(client_order_id)
+        if order is None:
+            raise ExecutionError(
+                f"Cannot cancel order {client_order_id!r}: unknown client_order_id."
+            )
+
+        if order.status is OrderState.NEW:
+            raise ExecutionError(
+                f"Cannot cancel order {client_order_id!r}: order has not been "
+                "submitted to a broker yet."
+            )
+
+        if order.status not in (
+            OrderState.SUBMITTED,
+            OrderState.ACKNOWLEDGED,
+            OrderState.PARTIALLY_FILLED,
+            OrderState.CANCEL_PENDING,
+        ):
+            raise ExecutionError(
+                f"Cannot cancel order {client_order_id!r}: order is in "
+                f"terminal state {order.status.value}."
+            )
+
+        if not order.broker_order_id:
+            raise ExecutionError(
+                f"Cannot cancel order {client_order_id!r}: no broker_order_id "
+                "assigned — order may not have reached the broker."
+            )
+
+        # Idempotent retry: an order already in CANCEL_PENDING skips the
+        # transition (CANCEL_PENDING → CANCEL_PENDING is not a valid edge).
+        if order.status is not OrderState.CANCEL_PENDING:
+            self._order_manager.mark_cancel_pending(client_order_id)
+
+        logger.info(
+            "Cancelling order: coid=%s broker_id=%s",
+            client_order_id,
+            order.broker_order_id,
+        )
+
+        try:
+            cancelled = self._broker.cancel_order(order.broker_order_id)
+        except Exception as exc:
+            self._failure_count += 1
+            self._consecutive_failures += 1
+            logger.error(
+                "Broker error while cancelling order: coid=%s error=%s — "
+                "order left in CANCEL_PENDING.",
+                client_order_id,
+                exc,
+            )
+            raise ExecutionError(
+                f"Broker error while cancelling order {client_order_id!r}: {exc}"
+            ) from exc
+
+        if not cancelled:
+            self._failure_count += 1
+            self._consecutive_failures += 1
+            logger.error(
+                "Broker refused cancellation of order %r — order left in "
+                "CANCEL_PENDING.",
+                client_order_id,
+            )
+            raise ExecutionError(
+                f"Broker refused to cancel order {client_order_id!r} "
+                f"(broker_order_id={order.broker_order_id!r}) — order left "
+                "in CANCEL_PENDING."
+            )
+
+        self._order_manager.mark_cancelled(client_order_id)
+
+        self._audit_ledger.record(
+            action=AuditAction.ORDER_CANCELLED,
+            symbol=order.symbol,
+            order_id=client_order_id,
+            strategy_id=order.strategy_id,
+            details={
+                "broker_order_id": order.broker_order_id,
+                "status": "CANCELLED",
+            },
+        )
+
+        logger.info(
+            "Order cancelled: coid=%s broker_id=%s",
+            client_order_id,
+            order.broker_order_id,
+        )
+        return True
+
+    def poll_status(self, client_order_id: str) -> Dict:
+        """Poll the broker for the latest status of an order and apply it.
+
+        This is the fill-confirmation path: when the broker reports the
+        order as (partially) filled, the OrderManager state is updated and
+        an ORDER_FILLED audit event is recorded.
+
+        Args:
+            client_order_id: Our internal idempotency key.
+
+        Returns:
+            The raw broker status dict
+            (``{'order_id', 'status', 'filled_quantity', 'avg_fill_price', ...}``).
+
+        Raises:
+            ExecutionError: If the order is unknown or has no
+                broker_order_id yet.
+        """
+        order = self._order_manager.get(client_order_id)
+        if order is None:
+            raise ExecutionError(
+                f"Cannot poll order {client_order_id!r}: unknown client_order_id."
+            )
+
+        if not order.broker_order_id:
+            raise ExecutionError(
+                f"Cannot poll order {client_order_id!r}: no broker_order_id "
+                "assigned — order may not have reached the broker."
+            )
+
+        broker_status = self._broker.get_order_status(
+            account=self._account_id,
+            order_id=order.broker_order_id,
+        )
+
+        status_str = str(broker_status.get("status", "UNKNOWN")).lower()
+        state = _BROKER_STATUS_MAP.get(status_str, OrderState.UNKNOWN)
+        filled_qty = float(broker_status.get("filled_quantity", 0) or 0)
+        avg_price = float(broker_status.get("avg_fill_price", 0) or 0)
+
+        # Apply state updates only on change (idempotent re-polls must not
+        # raise OrderStateError on self-transitions).
+        if state is OrderState.FILLED and order.status is not OrderState.FILLED:
+            self._order_manager.mark_filled(client_order_id, filled_qty, avg_price)
+            self._record_fill(order, filled_qty, avg_price, partial=False)
+        elif (
+            state is OrderState.PARTIALLY_FILLED
+            and order.status is not OrderState.PARTIALLY_FILLED
+        ):
+            self._order_manager.mark_partially_filled(
+                client_order_id, filled_qty, avg_price
+            )
+            self._record_fill(order, filled_qty, avg_price, partial=True)
+        elif state is OrderState.CANCELLED and order.status is not OrderState.CANCELLED:
+            self._order_manager.mark_cancelled(client_order_id)
+        elif state is OrderState.REJECTED and order.status is not OrderState.REJECTED:
+            self._order_manager.mark_rejected(client_order_id, reason="broker")
+        elif (
+            state is OrderState.ACKNOWLEDGED
+            and order.status is OrderState.SUBMITTED
+        ):
+            self._order_manager.mark_acknowledged(client_order_id)
+        else:
+            logger.debug(
+                "Poll left order unchanged: coid=%s state=%s broker_status=%r",
+                client_order_id,
+                order.status.value,
+                status_str,
+            )
+
+        return broker_status
+
+    def _record_fill(
+        self,
+        order: Order,
+        filled_qty: float,
+        avg_price: float,
+        partial: bool = False,
+    ) -> None:
+        """Record an ORDER_FILLED audit event for a confirmed fill."""
+        self._audit_ledger.record(
+            action=AuditAction.ORDER_FILLED,
+            symbol=order.symbol,
+            order_id=order.client_order_id,
+            strategy_id=order.strategy_id,
+            details={
+                "broker_order_id": order.broker_order_id,
+                "filled_quantity": filled_qty,
+                "avg_fill_price": avg_price,
+                "partial": partial,
+                "source": "poll_status",
+            },
+        )
+
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _validate(self, order: Order) -> None:
@@ -305,17 +527,50 @@ class ExecutionEngine:
     def _pre_trade_risk_check(self, order: Order) -> RiskDecision:
         """Run pre-trade risk validation via the RiskManager.
 
+        Fails closed: if the risk context cannot value the order (no price
+        for the order's symbol), the order is REJECTED rather than valued
+        at qty * 0.0 and allowed to pass the exposure checks.
+
         Returns:
             RiskDecision: The evaluation result.
 
         Raises:
-            RiskError / ExecutionError: If the risk manager rejects the order.
+            ExecutionError: If the risk context cannot value the order or
+                the risk manager rejects the order.
             KillSwitchError: If drawdown or daily loss limits are breached.
         """
+        prices = getattr(self, "_risk_prices", {})
+
+        # Fail-closed guard: an unpriceable order must never reach the
+        # exposure checks (order_value would silently compute as qty * 0.0).
+        price = order.limit_price if order.limit_price else prices.get(order.symbol)
+        if price is None or price <= 0:
+            reason = (
+                f"Risk context has no price for symbol {order.symbol!r} — "
+                "cannot value order (fail-closed)."
+            )
+            self._order_manager.mark_rejected(order.client_order_id, reason=reason)
+            self._audit_ledger.record(
+                action=AuditAction.ORDER_REJECTED,
+                symbol=order.symbol,
+                order_id=order.client_order_id,
+                strategy_id=order.strategy_id,
+                details={"reason": reason, "risk_rejection": True, "fail_closed": True},
+            )
+            logger.error(
+                "Order rejected (fail-closed): coid=%s symbol=%s — no price in "
+                "risk context.",
+                order.client_order_id,
+                order.symbol,
+            )
+            raise ExecutionError(
+                f"Order {order.client_order_id!r} rejected: {reason}"
+            )
+
         decision = self._risk_manager.evaluate_order(
             order=order,
             positions=getattr(self, "_risk_positions", {}),
-            prices=getattr(self, "_risk_prices", {}),
+            prices=prices,
             equity=getattr(self, "_risk_equity", 0.0),
         )
         if not decision.approved:
@@ -404,7 +659,7 @@ class ExecutionEngine:
     @property
     def stats(self) -> Dict:
         """Return basic submission statistics."""
-        result = {
+        result: Dict = {
             "submission_count": self._submission_count,
             "failure_count": self._failure_count,
             "consecutive_failures": self._consecutive_failures,

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
+
 import pandas as pd
 
 from pyrobot.logging_config import get_logger
@@ -105,7 +106,7 @@ class DatasetStore:
 
         date_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         dataset_id = f"{symbol.upper()}_{frequency}_{date_str}_{checksum[:8]}"
-        
+
         # Try parquet first; fallback to compressed csv.gz if pyarrow not installed
         file_format = "parquet"
         try:

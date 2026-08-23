@@ -45,6 +45,11 @@ class RiskLimits:
         circuit_breaker_loss_streak: Number of consecutive losses before
             circuit breaker activates.
         circuit_breaker_drawdown_pct: Drawdown threshold for circuit breaker.
+        default_stop_distance_pct: Default stop distance as a fraction of
+            entry price (0.02 = 2%) used by fixed-fraction position sizing.
+        per_trade_risk_pct: Fraction of equity to risk per trade for
+            fixed-fraction sizing. When None (default), falls back to
+            max_daily_loss_pct / 2 (half the daily loss budget per trade).
     """
 
     # Per-order limits
@@ -75,6 +80,10 @@ class RiskLimits:
     # Circuit breaker
     circuit_breaker_loss_streak: int = 5
     circuit_breaker_drawdown_pct: float = 0.05
+
+    # Position sizing defaults
+    default_stop_distance_pct: float = 0.02
+    per_trade_risk_pct: Optional[float] = None
 
     # Per-symbol overrides: symbol → override values
     symbol_overrides: Dict[str, Dict[str, float]] = field(default_factory=dict)
@@ -118,6 +127,18 @@ class RiskLimits:
             raise ValueError(
                 f"max_symbol_count must be non-negative, got {self.max_symbol_count}"
             )
+        if self.default_stop_distance_pct <= 0 or self.default_stop_distance_pct >= 1.0:
+            raise ValueError(
+                "default_stop_distance_pct must be in (0, 1.0), got "
+                f"{self.default_stop_distance_pct}"
+            )
+        if self.per_trade_risk_pct is not None and (
+            self.per_trade_risk_pct <= 0 or self.per_trade_risk_pct > 0.50
+        ):
+            raise ValueError(
+                f"per_trade_risk_pct must be in (0, 0.50] or None, got "
+                f"{self.per_trade_risk_pct}"
+            )
 
     def to_dict(self) -> Dict:
         """Serialize limits to a dictionary."""
@@ -137,6 +158,8 @@ class RiskLimits:
             "min_order_interval_seconds": self.min_order_interval_seconds,
             "circuit_breaker_loss_streak": self.circuit_breaker_loss_streak,
             "circuit_breaker_drawdown_pct": self.circuit_breaker_drawdown_pct,
+            "default_stop_distance_pct": self.default_stop_distance_pct,
+            "per_trade_risk_pct": self.per_trade_risk_pct,
             "symbol_overrides": self.symbol_overrides,
         }
 

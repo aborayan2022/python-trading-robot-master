@@ -1,10 +1,11 @@
 """Walk-Forward Analysis and Purged Cross-Validation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Tuple, Generator
-import pandas as pd
+from typing import Any, Callable, Generator, List
+
 import numpy as np
+import pandas as pd
 
 
 @dataclass
@@ -62,7 +63,7 @@ class WalkForwardValidator:
         for i in range(self.n_splits):
             train_start_idx = 0 if self.expanding else (i * step)
             train_end_idx = train_start_idx + self.train_period_days if not self.expanding else (self.train_period_days + i * step)
-            
+
             test_start_idx = train_end_idx + self.embargo_days
             test_end_idx = test_start_idx + self.test_period_days
 
@@ -92,3 +93,92 @@ class WalkForwardValidator:
                 train_indices=train_idx,
                 test_indices=test_idx,
             )
+
+
+@dataclass
+class WalkForwardResult:
+    """Aggregated out-of-sample results of a walk-forward evaluation."""
+
+    fold_scores: List[float] = field(default_factory=list)
+    oos_score: float = 0.0
+    oos_predictions: np.ndarray = field(default_factory=lambda: np.array([]))
+    oos_labels: np.ndarray = field(default_factory=lambda: np.array([]))
+
+    def summary(self) -> dict:
+        return {
+            "n_folds": len(self.fold_scores),
+            "fold_scores": [round(float(s), 6) for s in self.fold_scores],
+            "oos_score": round(float(self.oos_score), 6),
+            "n_oos_predictions": int(len(self.oos_predictions)),
+        }
+
+
+def run_walk_forward(
+    features: pd.DataFrame,
+    labels: pd.Series,
+    model_factory: Callable[[], Any],
+    train_fn: Callable[[Any, pd.DataFrame, pd.Series], None],
+    predict_fn: Callable[[Any, pd.DataFrame], np.ndarray],
+    metric_fn: Callable[[pd.Series, np.ndarray], float],
+    *,
+    n_splits: int = 5,
+    train_period_days: int = 252,
+    test_period_days: int = 63,
+    embargo_days: int = 5,
+    expanding: bool = True,
+) -> WalkForwardResult:
+    """Run a full walk-forward evaluation: re-fit per fold, score out-of-sample.
+
+    Generic and model-agnostic — the caller supplies how to build, train, and
+    predict with a model plus the scoring function, so any estimator (including
+    numpy-only models) can be validated without leaking future data.
+
+    Args:
+        features: Feature matrix indexed by timestamp (or (symbol, timestamp)).
+        labels: Aligned target series (same index as features).
+        model_factory: Zero-arg callable returning a fresh untrained model.
+        train_fn: (model, X_train, y_train) -> None (fits in place).
+        predict_fn: (model, X_test) -> np.ndarray of predictions.
+        metric_fn: (y_true, y_pred) -> float (higher is better).
+        n_splits/train_period_days/test_period_days/embargo_days/expanding:
+            Fold geometry forwarded to WalkForwardValidator.
+
+    Returns:
+        WalkForwardResult with per-fold scores, the aggregated OOS score computed
+        ONCE over the concatenated out-of-sample predictions, and the predictions.
+    """
+    df = features.copy()
+    validator = WalkForwardValidator(
+        n_splits=n_splits,
+        train_period_days=train_period_days,
+        test_period_days=test_period_days,
+        embargo_days=embargo_days,
+        expanding=expanding,
+    )
+
+    result = WalkForwardResult()
+    oos_preds: List[np.ndarray] = []
+    oos_labels: List[np.ndarray] = []
+
+    for split in validator.split(df):
+        train_idx = split.train_indices
+        test_idx = split.test_indices
+        if len(train_idx) == 0 or len(test_idx) == 0:
+            continue
+
+        model = model_factory()
+        train_fn(model, df.iloc[train_idx], labels.iloc[train_idx])
+        preds = np.asarray(predict_fn(model, df.iloc[test_idx]))
+
+        fold_score = float(metric_fn(labels.iloc[test_idx], preds))
+        result.fold_scores.append(fold_score)
+
+        oos_preds.append(preds)
+        oos_labels.append(labels.iloc[test_idx].to_numpy())
+
+    if oos_preds:
+        result.oos_predictions = np.concatenate(oos_preds)
+        result.oos_labels = np.concatenate(oos_labels)
+        result.oos_score = float(metric_fn(pd.Series(result.oos_labels), result.oos_predictions))
+
+    return result

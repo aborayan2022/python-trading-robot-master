@@ -1,16 +1,15 @@
 """Tests for utility modules."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
-
-from pyrobot.utils.retry import retry, is_retryable_exception, is_retryable_order_error
+from pyrobot.utils.retry import is_retryable_exception, is_retryable_order_error, retry
 from pyrobot.utils.timezone import (
-    utc_now,
-    to_utc,
-    parse_datetime,
     is_market_open,
+    parse_datetime,
+    to_utc,
+    utc_now,
 )
 
 

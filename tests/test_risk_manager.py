@@ -1,12 +1,13 @@
 """Unit tests for RiskManager PnL calculation, position tracking, and risk controls."""
 
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone
-from pyrobot.exceptions import KillSwitchError, ExecutionError
-from pyrobot.models.order import Order, OrderSide, OrderType, OrderState
-from pyrobot.risk.manager import RiskManager
+
+from pyrobot.models.order import Order, OrderSide
 from pyrobot.risk.limits import RiskLimits
-from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
+from pyrobot.risk.manager import RiskManager
 
 
 class TestRiskManagerPnLAndPositions:
@@ -81,3 +82,137 @@ class TestRiskManagerPnLAndPositions:
         pnl = risk_manager.record_fill(sell_order, fill_price=310.0, fill_qty=100)
         assert pnl == 1000.0
         assert risk_manager.get_tracked_positions()["MSFT"]["qty"] == 100
+
+
+class TestModelRiskScale:
+
+    @pytest.fixture
+    def risk_manager(self) -> RiskManager:
+        return RiskManager(limits=RiskLimits.conservative())
+
+    @pytest.fixture
+    def size_kwargs(self) -> dict:
+        return dict(
+            account_equity=100_000.0,
+            win_rate=0.55,
+            avg_win=0.03,
+            avg_loss=0.02,
+            price=150.0,
+            method="fixed_fraction",
+        )
+
+    def test_default_scale_is_one(self, risk_manager):
+        assert risk_manager.model_risk_scale == 1.0
+
+    def test_scale_multiplies_calculated_size(self, risk_manager, size_kwargs):
+        base = risk_manager.calculate_position_size(**size_kwargs)
+        assert base > 0
+
+        risk_manager.set_model_risk_scale(0.5, reason="model drift")
+        scaled = risk_manager.calculate_position_size(**size_kwargs)
+
+        assert scaled == int(base * 0.5)
+        assert risk_manager.model_risk_scale == 0.5
+        assert risk_manager.model_risk_scale_reason == "model drift"
+
+    def test_zero_scale_halts_sizing(self, risk_manager, size_kwargs):
+        risk_manager.set_model_risk_scale(0.0, reason="drift halt")
+        assert risk_manager.calculate_position_size(**size_kwargs) == 0
+
+    @pytest.mark.parametrize("bad_scale", [-0.1, 1.5, 2.0, float("nan")])
+    def test_invalid_scale_raises(self, risk_manager, bad_scale):
+        with pytest.raises(ValueError):
+            risk_manager.set_model_risk_scale(bad_scale)
+        assert risk_manager.model_risk_scale == 1.0
+
+    def test_scale_exposed_in_status(self, risk_manager):
+        risk_manager.set_model_risk_scale(0.75)
+        assert risk_manager.status()["model_risk_scale"] == 0.75
+
+
+class TestPositionSizingLimits:
+    """De-magicked sizing parameters come from RiskLimits."""
+
+    def _fixed_fraction_qty(self, limits: RiskLimits) -> int:
+        rm = RiskManager(limits=limits)
+        return rm.calculate_position_size(
+            account_equity=100_000.0,
+            win_rate=0.55,
+            avg_win=0.03,
+            avg_loss=0.02,
+            price=150.0,
+            method="fixed_fraction",
+        )
+
+    def test_per_trade_risk_pct_overrides_daily_loss_fallback(self):
+        # Conservative: max_daily_loss_pct=0.01 → fallback risk 0.005.
+        # Fixed-fraction: qty = equity * risk / (price * stop_pct).
+        base = self._fixed_fraction_qty(RiskLimits.conservative())
+        assert base == 166  # 100_000 * 0.005 / 3.0
+
+        doubled = self._fixed_fraction_qty(
+            replace(
+                RiskLimits.conservative(),
+                per_trade_risk_pct=0.01,
+                max_single_order_value=250_000.0,  # avoid value-cap masking
+            )
+        )
+        assert doubled == 333  # 100_000 * 0.01 / 3.0
+
+    def test_default_stop_distance_pct_widens_stop(self):
+        base = self._fixed_fraction_qty(RiskLimits.conservative())
+        assert base == 166  # stop = 150 * 0.02 = 3.0
+
+        wider_stop = self._fixed_fraction_qty(
+            replace(RiskLimits.conservative(), default_stop_distance_pct=0.04)
+        )
+        assert wider_stop == 83  # 500 / 6.0
+
+    def test_limits_validation_rejects_bad_sizing_params(self):
+        with pytest.raises(ValueError):
+            RiskLimits(default_stop_distance_pct=0.0).validate()
+        with pytest.raises(ValueError):
+            RiskLimits(per_trade_risk_pct=0.9).validate()
+        RiskLimits(per_trade_risk_pct=None).validate()  # None is allowed
+
+
+class TestCircuitBreakerHalfOpenWiring:
+
+    @pytest.fixture
+    def risk_manager(self) -> RiskManager:
+        rm = RiskManager(limits=RiskLimits.conservative())
+        rm.circuit_breaker.force_open("test")
+        rm.circuit_breaker._opened_at = (
+            datetime.now(timezone.utc) - timedelta(seconds=3600)
+        )
+        return rm
+
+    def test_half_open_allows_exactly_one_test_order(self, risk_manager):
+        order1 = Order(symbol="AAPL", side=OrderSide.BUY, quantity=10)
+        approved1, reason1 = risk_manager.check_order(
+            order1, {"AAPL": 0}, {"AAPL": 150.0}, 100_000.0
+        )
+        assert approved1, reason1
+
+        order2 = Order(symbol="MSFT", side=OrderSide.BUY, quantity=10)
+        approved2, reason2 = risk_manager.check_order(
+            order2, {"MSFT": 0}, {"MSFT": 150.0}, 100_000.0
+        )
+        assert not approved2
+        assert "Circuit breaker" in reason2
+
+    def test_winning_fill_releases_test_slot(self, risk_manager):
+        order = Order(symbol="AAPL", side=OrderSide.BUY, quantity=10)
+        approved, _ = risk_manager.check_order(
+            order, {"AAPL": 0}, {"AAPL": 150.0}, 100_000.0
+        )
+        assert approved
+
+        risk_manager.record_fill(order, fill_price=150.0, fill_qty=10)
+        assert risk_manager.circuit_breaker.is_closed
+
+        order2 = Order(symbol="MSFT", side=OrderSide.BUY, quantity=10)
+        approved2, reason2 = risk_manager.check_order(
+            order2, {"MSFT": 0}, {"MSFT": 150.0}, 100_000.0
+        )
+        assert approved2, reason2

@@ -1,6 +1,7 @@
 """Realistic Execution Cost and Market Microstructure Model."""
 
 from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -31,8 +32,14 @@ class ExecutionCostModel:
         price: float,
         bar_volume: float = 100000.0,
         volatility: float = 0.015,
+        enforce_participation: bool = True,
     ) -> dict:
         """Calculate effective fill price, filled quantity, and all transaction fees.
+
+        Args:
+            enforce_participation: When False, skip the volume-participation cap
+                (used for forced liquidations, which must complete regardless of
+                bar volume — the larger sqrt-impact term still prices the crowding).
 
         Returns:
             dict containing:
@@ -59,8 +66,11 @@ class ExecutionCostModel:
             }
 
         # 1. Volume participation and partial fill constraint
-        max_fillable = max(1.0, bar_volume * self.config.max_volume_participation)
-        filled_qty = min(quantity, max_fillable)
+        if enforce_participation:
+            max_fillable = max(1.0, bar_volume * self.config.max_volume_participation)
+            filled_qty = min(quantity, max_fillable)
+        else:
+            filled_qty = quantity
         participation_rate = filled_qty / max(bar_volume, 1.0)
 
         # 2. Spread cost (Half spread paid on entry and exit)

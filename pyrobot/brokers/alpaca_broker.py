@@ -1,15 +1,11 @@
 """Alpaca broker adapter for commission-free trading."""
 
 import os
-
 from datetime import datetime
-from typing import Dict
-from typing import List
+from typing import Dict, List, Optional
 
 from pyrobot.brokers.base import BrokerInterface
-from pyrobot.exceptions import AuthenticationError
-from pyrobot.exceptions import BrokerError
-from pyrobot.exceptions import OrderRejectedError
+from pyrobot.exceptions import AuthenticationError, BrokerError, OrderRejectedError
 from pyrobot.logging_config import get_logger
 
 logger = get_logger("alpaca")
@@ -165,8 +161,8 @@ class AlpacaBroker(BrokerInterface):
         (canonical order model) with fallback to top-level 'symbol' key.
         """
         try:
-            from alpaca.trading.requests import MarketOrderRequest
             from alpaca.trading.enums import OrderSide, TimeInForce
+            from alpaca.trading.requests import MarketOrderRequest
 
             side_map = {
                 "BUY": OrderSide.BUY,
@@ -214,7 +210,6 @@ class AlpacaBroker(BrokerInterface):
     def get_order_status(self, account: str, order_id: str) -> dict:
         """Get order status from Alpaca."""
         try:
-            from alpaca.trading.requests import GetOrderByIdRequest
 
             order = self._trading_client.get_order_by_id(order_id)
 
@@ -227,6 +222,47 @@ class AlpacaBroker(BrokerInterface):
             }
         except Exception as e:
             raise BrokerError(f"Failed to get order status from Alpaca: {e}") from e
+
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel an open order with Alpaca.
+
+        Returns True if the cancel request was accepted.
+        """
+        try:
+            if self._trading_client is None:
+                raise BrokerError(
+                    "Alpaca trading client not initialized; authenticate() first"
+                )
+            self._trading_client.cancel_order(order_id=order_id)
+            logger.info(f"Cancelled Alpaca order {order_id}")
+            return True
+        except Exception as e:
+            raise BrokerError(f"Failed to cancel order {order_id} at Alpaca: {e}") from e
+
+    def get_open_orders(self, account: Optional[str] = None) -> List[dict]:
+        """Get open orders from Alpaca."""
+        try:
+            from alpaca.trading.enums import QueryOrderStatus
+            from alpaca.trading.requests import GetOrdersRequest
+
+            if self._trading_client is None:
+                raise BrokerError(
+                    "Alpaca trading client not initialized; authenticate() first"
+                )
+            request = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+            orders = self._trading_client.get_orders(request)
+
+            return [
+                {
+                    "order_id": str(order.id),
+                    "symbol": order.symbol,
+                    "status": str(order.status.value),
+                    "quantity": float(order.qty or 0),
+                }
+                for order in orders
+            ]
+        except Exception as e:
+            raise BrokerError(f"Failed to get open orders from Alpaca: {e}") from e
 
     def get_account_info(self, account: str = None) -> dict:
         """Get account information from Alpaca."""

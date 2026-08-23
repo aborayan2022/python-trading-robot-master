@@ -1,18 +1,22 @@
-"""LLM Intelligence and Context Layer — Sentiment, News Classification, and Trade Explainability.
+"""News Sentiment and Context Layer — lexicon scoring and trade explainability.
+
+This module is a deterministic keyword-lexicon sentiment scorer. It makes NO
+LLM/API calls — plug in a real provider behind the same interface if online
+analysis is needed.
 
 Architecture Rule:
-The LLM is strictly an Intelligence & Context Layer. It NEVER owns the execution path
-and never directly submits orders to brokers.
+The sentiment layer is strictly an Intelligence & Context Layer. It NEVER owns
+the execution path and never directly submits orders to brokers.
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from pyrobot.logging_config import get_logger
 
-logger = get_logger("llm_context")
+logger = get_logger("sentiment_context")
 
 
 class NewsEventType(str, Enum):
@@ -53,10 +57,19 @@ class SentimentAnalysis:
         }
 
 
-class LLMContextEngine:
-    """Intelligence layer for news extraction, sentiment scoring, and trade rationale explanations."""
+class LexiconSentimentEngine:
+    """Deterministic lexicon-based news sentiment scoring and trade explanations.
+
+    Scores headlines by counting hits against small bullish/bearish word lists.
+    Confidence/importance are fixed heuristic constants, NOT model outputs.
+    """
+
+    #: Confidence assigned to every lexicon verdict (heuristic, not calibrated).
+    LEXICON_CONFIDENCE = 0.85
 
     def __init__(self, api_key: Optional[str] = None) -> None:
+        # api_key accepted for interface compatibility with future online
+        # providers; this engine never uses it.
         self.api_key = api_key
 
     def analyze_headline(
@@ -94,7 +107,7 @@ class LLMContextEngine:
             sentiment_score=sentiment,
             event_type=event,
             importance=0.5 if abs(sentiment) < 0.5 else 0.8,
-            confidence=0.85,
+            confidence=self.LEXICON_CONFIDENCE,
             summary=summary,
         )
 
@@ -115,3 +128,8 @@ class LLMContextEngine:
             f"  - Signal Rationale: {signal_reason} (Confidence: {confidence:.1%})\n"
             f"  - Risk Governance: {risk_decision_reason}"
         )
+
+
+# Backward-compatible alias. The old name claimed an LLM; the implementation
+# was always a keyword lexicon — use the new name.
+LLMContextEngine = LexiconSentimentEngine

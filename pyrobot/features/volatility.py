@@ -1,8 +1,9 @@
 """Volatility and Dispersion Feature Extractor."""
 
+from typing import List
+
 import numpy as np
 import pandas as pd
-from typing import List
 
 from pyrobot.features.base import BaseFeatureExtractor, FeatureMetadata
 
@@ -35,7 +36,7 @@ class VolatilityFeatures(BaseFeatureExtractor):
     def extract(self, df: pd.DataFrame) -> pd.DataFrame:
         self.validate_input(df)
         res = pd.DataFrame(index=df.index)
-        
+
         high = df["high"]
         low = df["low"]
         close = df["close"]

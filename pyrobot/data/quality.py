@@ -5,12 +5,12 @@ out-of-order timestamps, and staleness.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 import pandas as pd
 
-from pyrobot.exceptions import DataQualityError, StaleDataError
+from pyrobot.exceptions import DataQualityError
 from pyrobot.logging_config import get_logger
 
 logger = get_logger("data_quality")

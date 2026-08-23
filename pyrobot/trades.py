@@ -1,9 +1,5 @@
-import json
 from datetime import datetime
-
-from typing import List
-from typing import Dict
-from typing import Any
+from typing import Any, Dict, List
 
 
 class Trade():
@@ -38,7 +34,7 @@ class Trade():
         self._multi_leg = False
         self._one_cancels_other = False
         self._broker: Any = None
-    
+
     def to_dict(self) -> dict:
 
         # Initialize the Dict.
@@ -332,7 +328,7 @@ class Trade():
 
         if make_one_cancels_other:
             self.add_one_cancels_other()
-        
+
         self.is_box_range = True
 
     def add_stop_loss(self, stop_size: float, percentage: bool = False) -> bool:
@@ -514,7 +510,7 @@ class Trade():
             new_price = round(new_price, 2)
 
         return new_price
-    
+
     def grab_price(self) -> float:
         """Grabs the current price of the order.
 
@@ -522,7 +518,7 @@ class Trade():
         -------
         float
             The price rounded to 2 decimal places.
-        """        
+        """
 
         # We need to basis to calculate off of. Use the price.
         if self.order_type == 'mkt':
@@ -534,14 +530,14 @@ class Trade():
 
         elif self.order_type == 'lmt':
             price = self.price
-        
+
         else:
 
             quote = self._broker.get_quotes(symbols=[self.symbol])
 
             # Have to make a call to Get Quotes.
             price = quote[self.symbol]['last_price']
-        
+
         return round(price, 2)
 
     def add_take_profit(self, profit_size: float, percentage: bool = False) -> bool:
@@ -565,7 +561,7 @@ class Trade():
         # Check to see if we have a trigger order.
         if not self._triggered_added:
             self._convert_to_trigger()
-        
+
         price = self.grab_price()
 
         # Calculate the new price.
@@ -629,7 +625,7 @@ class Trade():
                 'childOrderStrategies':[]
             }
         ]
-        
+
         # If we alread have a trigger than their are orders there.
         if self._triggered_added:
 
@@ -641,7 +637,7 @@ class Trade():
 
             # Set the new child order strategy.
             self.order['childOrderStrategies'] = new_temp
-        
+
         # Set it so we know it's a One Cancels Other.
         self._one_cancels_other = True
 
@@ -873,7 +869,7 @@ class Trade():
             return False
         else:
             return True
-    
+
     @property
     def is_trigger_order(self) -> bool:
         """Specifies whether the order is a trigger order.
@@ -890,13 +886,13 @@ class Trade():
             return False
 
     def _process_order_response(self) -> None:
-        """Processes an order response, after is has been submitted."""        
-        
+        """Processes an order response, after is has been submitted."""
+
         self.order_id =  self._order_response["order_id"]
         self.order_status = "QUEUED"
-    
+
     def _update_order_status(self) -> None:
-        """Updates the current order status via the broker."""        
+        """Updates the current order status via the broker."""
 
         if self.order_id != "" and self._broker is not None:
 
@@ -907,7 +903,7 @@ class Trade():
 
             self.order_response = order_response
             self.order_status = self.order_response.get('status', 'UNKNOWN')
-    
+
     def check_status(self) -> object:
         """Used to easily identify the order status.
 
@@ -923,7 +919,7 @@ class Trade():
         return OrderStatus(trade_obj=self)
 
     def update_children(self) -> None:
-        """Updates the Price info of the children info."""        
+        """Updates the Price info of the children info."""
 
         if self._broker is None:
             return
@@ -933,11 +929,11 @@ class Trade():
 
         # Loop through each child.
         for order in children:
-            
+
             # Get the latest price.
             quote = self._broker.get_quotes(symbols=[self.symbol])
             last_price = quote[self.symbol]['last_price']
-            
+
             # Update the price.
             if order['orderType'] == 'STOP':
                 order['stopPrice'] = round(order['stopPrice'] + last_price, 2)

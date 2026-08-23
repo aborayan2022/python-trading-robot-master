@@ -1,7 +1,8 @@
 """Monte Carlo Simulation for Strategy Stress Testing and Risk of Ruin."""
 
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 import numpy as np
 
 
@@ -34,19 +35,28 @@ class MonteCarloReport:
 
 
 class MonteCarloSimulator:
-    """Runs bootstrap resampling and sequence randomization over trade lists."""
+    """Runs bootstrap resampling and sequence randomization over trade lists.
+
+    Sharpe figures are per-trade ratios (mean/std of resampled trade returns),
+    NOT annualized: bootstrapped trades have no calendar. If trades_per_year is
+    provided, median_sharpe/p5_sharpe are annualized with sqrt(trades_per_year).
+    Ruin is drawdown-based only: a path is ruined when its equity drawdown from
+    peak ever reaches ruin_threshold_pct.
+    """
 
     def __init__(
         self,
         n_simulations: int = 1000,
         initial_capital: float = 100000.0,
-        ruin_threshold_pct: float = 0.25, # e.g. Losing 25% of account
+        ruin_threshold_pct: float = 0.25,  # e.g. Losing 25% of account
         seed: int | None = 42,
+        trades_per_year: float | None = None,
     ) -> None:
         self.n_simulations = n_simulations
         self.initial_capital = initial_capital
         self.ruin_threshold_pct = ruin_threshold_pct
         self.seed = seed
+        self.trades_per_year = trades_per_year
 
     def run(self, trades: List[Dict[str, Any]]) -> MonteCarloReport:
         """Run Monte Carlo simulation across trade PnLs."""
@@ -63,8 +73,7 @@ class MonteCarloSimulator:
                 p5_sharpe=0.0,
             )
 
-        if self.seed is not None:
-            np.random.seed(self.seed)
+        rng = np.random.default_rng(self.seed)
 
         pnls = np.array([t.get("pnl", 0.0) for t in trades])
         n_trades = len(pnls)
@@ -73,10 +82,12 @@ class MonteCarloSimulator:
         sim_drawdowns = []
         sim_sharpes = []
         ruined_count = 0
+        ann_factor = np.sqrt(self.trades_per_year) if self.trades_per_year else 1.0
 
         for _ in range(self.n_simulations):
-            # Resample with replacement
-            sampled_pnls = np.random.choice(pnls, size=n_trades, replace=True)
+            # Resample with replacement (i.i.d. bootstrap — trade autocorrelation
+            # is destroyed; treat results as an optimistic stress bound).
+            sampled_pnls = rng.choice(pnls, size=n_trades, replace=True)
             equity_curve = self.initial_capital + np.cumsum(sampled_pnls)
             equity_curve = np.insert(equity_curve, 0, self.initial_capital)
 
@@ -84,20 +95,20 @@ class MonteCarloSimulator:
             total_ret = (equity_curve[-1] - self.initial_capital) / self.initial_capital
             sim_returns.append(total_ret * 100.0)
 
-            # Max Drawdown
+            # Max Drawdown (peak-to-trough on the equity path)
             peak = np.maximum.accumulate(equity_curve)
             dd = (equity_curve - peak) / peak
             max_dd = float(abs(dd.min()))
             sim_drawdowns.append(max_dd * 100.0)
 
-            # Ruin check
-            if max_dd >= self.ruin_threshold_pct or np.any(equity_curve <= self.initial_capital * (1.0 - self.ruin_threshold_pct)):
+            # Ruin check: drawdown-based only (no double counting)
+            if max_dd >= self.ruin_threshold_pct:
                 ruined_count += 1
 
-            # Sharpe of trade returns
+            # Sharpe of per-trade returns (unannualized unless trades_per_year set)
             trade_returns = sampled_pnls / self.initial_capital
             std = trade_returns.std()
-            sharpe = (trade_returns.mean() / std * np.sqrt(252)) if std > 0 else 0.0
+            sharpe = (trade_returns.mean() / std * ann_factor) if std > 0 else 0.0
             sim_sharpes.append(sharpe)
 
         return MonteCarloReport(

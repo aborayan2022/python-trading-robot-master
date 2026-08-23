@@ -4,9 +4,8 @@ All internal datetimes should be UTC. Use these utilities to convert
 to/from market timezones when needed.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-
 
 # Common US market timezone offsets
 ET_OFFSET = timedelta(hours=-5)  # EST (standard time)

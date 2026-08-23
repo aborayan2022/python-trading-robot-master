@@ -3,8 +3,6 @@
 import pandas as pd
 import pytest
 
-from pyrobot.stock_frame import StockFrame
-
 
 class TestStockFrame:
     """Tests for StockFrame creation and manipulation."""

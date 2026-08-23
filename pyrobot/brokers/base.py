@@ -1,13 +1,8 @@
 """Abstract base class for all broker adapters."""
 
-from abc import ABC
-from abc import abstractmethod
-
+from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Dict, List, Optional
 
 
 class BrokerInterface(ABC):
@@ -69,9 +64,37 @@ class BrokerInterface(ABC):
         """Get the status of an order.
 
         Returns a dict with at minimum:
-            {'order_id', 'status', 'filled_quantity', 'remaining_quantity'}
+            {'order_id', 'status', 'quantity', 'filled_quantity',
+             'remaining_quantity', 'avg_fill_price'}
         """
         ...
+
+    @abstractmethod
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel an open order.
+
+        Arguments:
+        ----
+        order_id {str} -- The broker-assigned order id to cancel.
+
+        Returns:
+        ----
+        {bool} -- True if the order was cancelled, False if it could
+            not be cancelled (unknown, already filled, or otherwise
+            in a terminal state).
+        """
+        ...
+
+    def get_open_orders(self, account: Optional[str] = None) -> List[dict]:
+        """Get currently open (working) orders for an account.
+
+        Returns a list of dicts, each with at minimum:
+            {'order_id', 'status', 'quantity'}
+
+        The default implementation returns an empty list. Adapters
+        with a cheap open-orders endpoint should override this.
+        """
+        return []
 
     @abstractmethod
     def get_account_info(self, account: str = None) -> dict:

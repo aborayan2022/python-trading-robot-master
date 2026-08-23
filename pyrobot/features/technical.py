@@ -1,8 +1,9 @@
 """Technical and Price Action Feature Extractor."""
 
+from typing import List
+
 import numpy as np
 import pandas as pd
-from typing import List
 
 from pyrobot.features.base import BaseFeatureExtractor, FeatureMetadata
 
@@ -70,7 +71,7 @@ class TechnicalFeatures(BaseFeatureExtractor):
         bb_std = close.rolling(window=self.bollinger_period, min_periods=self.bollinger_period).std()
         upper = bb_sma + (self.bollinger_std * bb_std)
         lower = bb_sma - (self.bollinger_std * bb_std)
-        
+
         res["bb_upper_ratio"] = (close / upper) - 1.0
         res["bb_lower_ratio"] = (close / lower) - 1.0
         res["bb_bandwidth"] = (upper - lower) / bb_sma.replace(0, np.nan)
@@ -82,7 +83,7 @@ class TechnicalFeatures(BaseFeatureExtractor):
         macd = ema12 - ema26
         signal = macd.ewm(span=9, adjust=False).mean()
         hist = macd - signal
-        
+
         # Normalize MACD by close price to keep stationarity
         res["macd"] = macd / close
         res["macd_signal"] = signal / close

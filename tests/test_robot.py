@@ -1,9 +1,21 @@
 """Tests for the PyRobot class."""
 
-import pytest
+import pandas as pd
 
-from pyrobot.robot import PyRobot
 from pyrobot.brokers.paper_broker import PaperBroker
+from pyrobot.robot import PyRobot
+
+
+class SpyPaperBroker(PaperBroker):
+    """PaperBroker spy that counts broker.place_order calls."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.place_order_calls = 0
+
+    def place_order(self, account: str, order: dict) -> dict:
+        self.place_order_calls += 1
+        return super().place_order(account, order)
 
 
 class TestPyRobot:
@@ -125,3 +137,88 @@ class TestPyRobot:
         accounts = robot.get_accounts()
         assert isinstance(accounts, dict)
         assert "cash_balance" in accounts
+
+    def test_execute_signals_routes_through_broker(self, monkeypatch):
+        """Paper mode must call broker.place_order, not fabricate order ids."""
+        broker = SpyPaperBroker()
+        broker.authenticate()
+        broker.update_prices({"MSFT": {"close": 400.0}})
+        robot = PyRobot(broker=broker, paper_trading=True)
+        robot.create_portfolio()
+        monkeypatch.setattr(robot, "save_orders", lambda order_response_dict: True)
+
+        trade = robot.create_trade(
+            trade_id="long_msft",
+            enter_or_exit="enter",
+            long_or_short="long",
+            order_type="mkt",
+        )
+        trade.instrument(symbol="MSFT", quantity=10, asset_type="EQUITY")
+        trades_to_execute = {
+            "MSFT": {
+                "has_executed": False,
+                "buy": {"trade_func": trade},
+                "sell": {"trade_func": trade},
+            }
+        }
+        signals = {
+            "buys": pd.Series(
+                [1.0],
+                index=pd.MultiIndex.from_tuples(
+                    [("MSFT", pd.Timestamp("2024-01-02 14:30"))]
+                ),
+            ),
+            "sells": pd.Series(),
+        }
+
+        responses = robot.execute_signals(
+            signals=signals, trades_to_execute=trades_to_execute
+        )
+
+        assert broker.place_order_calls == 1
+        assert len(responses) == 1
+        # The order id must come from the broker, not be fabricated.
+        assert responses[0]["order_id"] == broker.order_history[0]["order_id"]
+        assert responses[0]["status"] == "FILLED"
+        assert trades_to_execute["MSFT"]["has_executed"] is True
+
+    def test_execute_signals_routes_sells_through_broker(self, monkeypatch):
+        """Sell signals must also be routed through the broker."""
+        broker = SpyPaperBroker()
+        broker.authenticate()
+        broker.update_prices({"MSFT": {"close": 400.0}})
+        robot = PyRobot(broker=broker, paper_trading=True)
+        robot.create_portfolio()
+        monkeypatch.setattr(robot, "save_orders", lambda order_response_dict: True)
+
+        trade = robot.create_trade(
+            trade_id="short_msft",
+            enter_or_exit="enter",
+            long_or_short="short",
+            order_type="mkt",
+        )
+        trade.instrument(symbol="MSFT", quantity=10, asset_type="EQUITY")
+        trades_to_execute = {
+            "MSFT": {
+                "has_executed": False,
+                "buy": {"trade_func": trade},
+                "sell": {"trade_func": trade},
+            }
+        }
+        signals = {
+            "buys": pd.Series(),
+            "sells": pd.Series(
+                [1.0],
+                index=pd.MultiIndex.from_tuples(
+                    [("MSFT", pd.Timestamp("2024-01-02 14:30"))]
+                ),
+            ),
+        }
+
+        responses = robot.execute_signals(
+            signals=signals, trades_to_execute=trades_to_execute
+        )
+
+        assert broker.place_order_calls == 1
+        assert len(responses) == 1
+        assert responses[0]["order_id"] == broker.order_history[0]["order_id"]

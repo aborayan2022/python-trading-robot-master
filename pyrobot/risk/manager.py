@@ -30,27 +30,23 @@ Usage::
     rm.update_equity(100_000.0)
 """
 
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple
+import math
 import threading
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
 
 from pyrobot.exceptions import (
     KillSwitchError,
-    PositionLimitError,
-    DailyLossLimitError,
-    DrawdownLimitError,
-    ExposureLimitError,
-    RiskError,
 )
 from pyrobot.logging_config import get_logger
 from pyrobot.models.order import Order, OrderSide
-from pyrobot.risk.limits import RiskLimits
-from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
-from pyrobot.risk.position_sizer import PositionSizer
-from pyrobot.risk.exposure import ExposureMonitor, ExposureSnapshot
-from pyrobot.risk.drawdown import DrawdownMonitor
 from pyrobot.risk.circuit_breaker import CircuitBreaker
 from pyrobot.risk.decision import RiskDecision
+from pyrobot.risk.drawdown import DrawdownMonitor
+from pyrobot.risk.exposure import ExposureMonitor, ExposureSnapshot
+from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
+from pyrobot.risk.limits import RiskLimits
+from pyrobot.risk.position_sizer import PositionSizer
 
 logger = get_logger("risk_manager")
 
@@ -89,6 +85,10 @@ class RiskManager:
         self._daily_realized_pnl: float = 0.0
         self._daily_date: Optional[str] = None
         self._positions: Dict[str, Dict[str, float]] = {}
+
+        # Model drift scaling (see set_model_risk_scale)
+        self._model_risk_scale: float = 1.0
+        self._model_risk_scale_reason: str = ""
 
         self._lock = threading.RLock()
 
@@ -212,6 +212,7 @@ class RiskManager:
                 quantity=order.quantity,
                 price=self._get_fill_price(order, prices),
                 account_equity=equity,
+                positions=positions,
             )
             if not exposure_ok:
                 checks_failed.append("exposure_limits")
@@ -225,6 +226,23 @@ class RiskManager:
                     metrics=metrics,
                 )
             checks_passed.append("exposure_limits")
+
+            # 8. Claim HALF_OPEN test slot — the circuit breaker allows
+            # exactly one test order per half-open episode.
+            if not self._circuit_breaker.claim_test_order():
+                checks_failed.append("circuit_breaker_test_order")
+                return RiskDecision(
+                    approved=False,
+                    reason=(
+                        "Circuit breaker HALF_OPEN test order already "
+                        "in flight — awaiting trade result"
+                    ),
+                    order_id=order.client_order_id,
+                    symbol=order.symbol,
+                    checks_passed=checks_passed,
+                    checks_failed=checks_failed,
+                    metrics=metrics,
+                )
 
             return RiskDecision(
                 approved=True,
@@ -269,6 +287,9 @@ class RiskManager:
     ) -> int:
         """Calculate optimal position size.
 
+        The final size is scaled by the circuit breaker position scale and
+        the model risk scale (see set_model_risk_scale).
+
         Args:
             account_equity: Current portfolio equity.
             win_rate: Historical win rate.
@@ -291,19 +312,52 @@ class RiskManager:
                 confidence=confidence,
             )
         else:
-            stop_distance = price * 0.02  # Default 2% stop
+            stop_distance = price * self._limits.default_stop_distance_pct
+            risk_per_trade_pct = self._limits.per_trade_risk_pct
+            if risk_per_trade_pct is None:
+                # Fallback: half the daily loss budget per trade
+                # (see RiskLimits.per_trade_risk_pct).
+                risk_per_trade_pct = self._limits.max_daily_loss_pct / 2.0
             qty = self._position_sizer.fixed_fraction_size(
                 account_equity=account_equity,
-                risk_per_trade_pct=self._limits.max_daily_loss_pct / 2,
+                risk_per_trade_pct=risk_per_trade_pct,
                 stop_distance=stop_distance,
                 price=price,
                 confidence=confidence,
             )
 
-        # Apply circuit breaker scaling
-        qty = int(qty * self._circuit_breaker.position_scale)
+        # Apply circuit breaker and model drift scaling
+        with self._lock:
+            scale = self._circuit_breaker.position_scale * self._model_risk_scale
 
-        return qty
+        return int(qty * scale)
+
+    def set_model_risk_scale(self, scale: float, reason: str = "") -> None:
+        """Set the model-risk scaling factor applied to position sizes.
+
+        Intended for model-drift wiring: a monitoring layer can throttle
+        sizing (down to a full halt at 0.0) when live model performance
+        degrades, without touching the kill switch.
+
+        Args:
+            scale: Multiplier in [0.0, 1.0] applied to calculated sizes.
+            reason: Optional human-readable reason (e.g. "drift score 0.8").
+
+        Raises:
+            ValueError: If scale is outside [0.0, 1.0] or not finite.
+        """
+        with self._lock:
+            if not math.isfinite(scale) or not 0.0 <= scale <= 1.0:
+                raise ValueError(
+                    f"model_risk_scale must be in [0.0, 1.0], got {scale}"
+                )
+            self._model_risk_scale = float(scale)
+            self._model_risk_scale_reason = reason
+            logger.info(
+                "Model risk scale set to %.2f (reason=%s)",
+                self._model_risk_scale,
+                reason or "none",
+            )
 
     # ── Post-trade updates ────────────────────────────────────────────────────
 
@@ -435,6 +489,16 @@ class RiskManager:
     def daily_realized_pnl(self) -> float:
         return self._daily_realized_pnl
 
+    @property
+    def model_risk_scale(self) -> float:
+        """Current model-risk scaling factor applied to position sizes."""
+        return self._model_risk_scale
+
+    @property
+    def model_risk_scale_reason(self) -> str:
+        """Reason recorded with the most recent model risk scale change."""
+        return self._model_risk_scale_reason
+
     def status(self) -> Dict:
         """Full risk status snapshot."""
         return {
@@ -446,6 +510,7 @@ class RiskManager:
             "daily_loss_pct": self._drawdown_monitor.daily_loss_pct,
             "daily_realized_pnl": self._daily_realized_pnl,
             "position_scale": self._circuit_breaker.position_scale,
+            "model_risk_scale": self._model_risk_scale,
         }
 
     # ── Internal helpers ──────────────────────────────────────────────────────

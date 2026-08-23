@@ -3,7 +3,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set
+from typing import List
+
 import pandas as pd
 
 
@@ -46,7 +47,7 @@ class BaseFeatureExtractor(ABC):
         """Validate that input DataFrame satisfies minimum requirements."""
         if df.empty:
             raise ValueError("Input DataFrame is empty.")
-        
+
         # Case-insensitive column matching
         lower_cols = {c.lower(): c for c in df.columns}
         for req in self.metadata.requires_columns:

@@ -1,18 +1,11 @@
 """Schwab broker adapter wrapping schwab-py."""
 
 import os
-import time
-
 from datetime import datetime
-from datetime import timezone
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Dict, List, Optional
 
 from pyrobot.brokers.base import BrokerInterface
-from pyrobot.exceptions import AuthenticationError
-from pyrobot.exceptions import BrokerError
-from pyrobot.exceptions import OrderRejectedError
+from pyrobot.exceptions import AuthenticationError, BrokerError, OrderRejectedError
 from pyrobot.logging_config import get_logger
 
 logger = get_logger("schwab")
@@ -43,6 +36,7 @@ class SchwabBroker(BrokerInterface):
             os.path.expanduser("~"), ".schwab", "token.json"
         )
         self._client = None
+        self._last_account: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -158,6 +152,7 @@ class SchwabBroker(BrokerInterface):
             response = self._client.place_order(account_number=account, order=order)
             response.raise_for_status()
 
+            self._last_account = account
             order_id = response.headers.get("Location", "").split("/")[-1]
 
             return {
@@ -167,6 +162,36 @@ class SchwabBroker(BrokerInterface):
             }
         except Exception as e:
             raise OrderRejectedError(f"Order rejected by Schwab: {e}") from e
+
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel an open order with Schwab.
+
+        Uses the account number from the most recent place_order call
+        (the Schwab order API is account-scoped).
+        """
+        try:
+            if self._client is None:
+                raise BrokerError(
+                    "Schwab client not initialized; authenticate() first"
+                )
+            account = self._last_account
+            if not account:
+                logger.warning(
+                    f"Cannot cancel order {order_id}: no account number known. "
+                    "Place an order first or pass the account explicitly."
+                )
+                return False
+
+            response = self._client.cancel_order(
+                order_id=order_id, account_number=account
+            )
+            response.raise_for_status()
+            logger.info(f"Cancelled Schwab order {order_id}")
+            return True
+        except Exception as e:
+            raise BrokerError(
+                f"Failed to cancel order {order_id} at Schwab: {e}"
+            ) from e
 
     def get_order_status(self, account: str, order_id: str) -> dict:
         """Get order status from Schwab."""

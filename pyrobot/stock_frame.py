@@ -1,12 +1,8 @@
+from typing import Dict, List, Union
+
 import pandas as pd
-
-from typing import List
-from typing import Dict
-from typing import Union
-
 from pandas.core.groupby import DataFrameGroupBy
 from pandas.core.window import RollingGroupby
-from pandas.core.window import Window
 
 
 class StockFrame():
@@ -16,7 +12,7 @@ class StockFrame():
 
         Arguments:
         ----
-        data {List[Dict]} -- The data to convert to a frame. Normally, this is 
+        data {List[Dict]} -- The data to convert to a frame. Normally, this is
             returned from the historical prices endpoint.
         """
 
@@ -111,7 +107,7 @@ class StockFrame():
 
         price_df['datetime'] = pd.to_datetime(
             price_df['datetime'],
-            unit='ms', 
+            unit='ms',
             origin='unix'
         )
 
@@ -278,15 +274,15 @@ class StockFrame():
                     column, sell_condition_target
                 )
 
-                condition_1 = condition_1.where(lambda x: x == True).dropna()
-                condition_2 = condition_2.where(lambda x: x == True).dropna()
+                condition_1 = condition_1.where(lambda x: x).dropna()
+                condition_2 = condition_2.where(lambda x: x).dropna()
 
                 conditions['buys'] = condition_1
                 conditions['sells'] = condition_2
-        
+
         # Store the indicators in a list.
         check_indicators = []
-        
+
         # Split the name so we can check if the indicator exist.
         for indicator in indciators_comp_key:
             parts = indicator.split('_comp_')
@@ -295,7 +291,7 @@ class StockFrame():
         if self.do_indicator_exist(column_names=check_indicators):
 
             for indicator in indciators_comp_key:
-                
+
                 # Split the indicators.
                 parts = indicator.split('_comp_')
 
@@ -315,7 +311,7 @@ class StockFrame():
                     )
 
                     # Keep the one's that aren't null.
-                    condition_1 = condition_1.where(lambda x: x == True).dropna()
+                    condition_1 = condition_1.where(lambda x: x).dropna()
 
                     # Add it as a buy signal.
                     conditions['buys'] = condition_1
@@ -332,7 +328,7 @@ class StockFrame():
                     )
 
                     # keep the one's that aren't null.
-                    condition_2 = condition_2.where(lambda x: x == True).dropna()
+                    condition_2 = condition_2.where(lambda x: x).dropna()
 
                     # Add it as a sell signal.
                     conditions['sells'] = condition_2
@@ -353,7 +349,7 @@ class StockFrame():
         pd.Series
             A candle bar, represented as a
             pandas series object.
-        """        
+        """
 
         # Filter the Stock Frame.
         bars_filtered = self._frame.filter(like=symbol, axis=0)
@@ -378,7 +374,7 @@ class StockFrame():
         pd.Series
             A candle bar, represented as a
             pandas series object.
-        """        
+        """
 
         # Filter the Stock Frame.
         bars_filtered = self._frame.filter(like=symbol, axis=0)

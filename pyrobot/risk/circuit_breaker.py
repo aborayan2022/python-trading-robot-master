@@ -18,13 +18,12 @@ Usage::
         # Wait for cooldown...
 """
 
-import time
 
 from datetime import datetime, timezone
 from enum import Enum
 
-from pyrobot.risk.limits import RiskLimits
 from pyrobot.logging_config import get_logger
+from pyrobot.risk.limits import RiskLimits
 
 logger = get_logger("circuit_breaker")
 
@@ -43,16 +42,16 @@ class CircuitBreaker:
     Args:
         limits: RiskLimits configuration.
         cooldown_seconds: Seconds to wait in OPEN state before transitioning
-            to HALF_OPEN. Defaults to limits config.
+            to HALF_OPEN. Defaults to 300.
     """
 
     def __init__(
         self,
         limits: RiskLimits | None = None,
-        cooldown_seconds: int | None = None,
+        cooldown_seconds: int = 300,
     ) -> None:
         self._limits = limits or RiskLimits()
-        self._cooldown_seconds = cooldown_seconds or 300
+        self._cooldown_seconds = cooldown_seconds
 
         self._state: CircuitState = CircuitState.CLOSED
         self._consecutive_losses: int = 0
@@ -75,8 +74,16 @@ class CircuitBreaker:
 
     @property
     def is_open(self) -> bool:
-        """True if the circuit is OPEN (trading halted)."""
-        return self.state == CircuitState.OPEN
+        """True if trading is halted.
+
+        This covers both the OPEN state and a HALF_OPEN state whose single
+        test order (see claim_test_order) is already in flight and awaiting
+        a trade result.
+        """
+        state = self.state
+        return state == CircuitState.OPEN or (
+            state == CircuitState.HALF_OPEN and self._half_open_tested
+        )
 
     @property
     def is_half_open(self) -> bool:
@@ -112,6 +119,28 @@ class CircuitBreaker:
             return 0.5
         return 0.0
 
+    def claim_test_order(self) -> bool:
+        """Claim the single test-order slot in HALF_OPEN state.
+
+        In HALF_OPEN the breaker allows exactly one test order (sized at
+        position_scale 0.5). The slot is held until the next trade result
+        is recorded via record_trade_result: a win closes the breaker and
+        a loss re-opens it for another cooldown period.
+
+        Returns:
+            True if an order may proceed (breaker CLOSED, or the HALF_OPEN
+            test slot was successfully claimed); False if the breaker is
+            OPEN or the HALF_OPEN test order is already in flight.
+        """
+        state = self.state
+        if state == CircuitState.CLOSED:
+            return True
+        if state == CircuitState.HALF_OPEN and not self._half_open_tested:
+            self._half_open_tested = True
+            logger.info("Circuit breaker HALF_OPEN test order claimed (scale=0.5)")
+            return True
+        return False
+
     def record_trade_result(self, pnl: float) -> None:
         """Record the PnL result of a completed trade.
 
@@ -126,9 +155,10 @@ class CircuitBreaker:
             self._consecutive_losses = 0
 
             if self._state == CircuitState.HALF_OPEN:
-                # Recovery confirmed
+                # Recovery confirmed — release the test slot
                 self._state = CircuitState.CLOSED
                 self._opened_at = None
+                self._half_open_tested = False
                 logger.info(
                     "Circuit breaker CLOSED — recovery confirmed after %d trades",
                     self._total_trades,
@@ -137,8 +167,10 @@ class CircuitBreaker:
             self._total_losses += 1
             self._consecutive_losses += 1
 
-            # Check loss streak threshold
-            if self._consecutive_losses >= self._limits.circuit_breaker_loss_streak:
+            if self._state == CircuitState.HALF_OPEN:
+                # Test order failed — re-open for another cooldown period
+                self._open("half_open_test_failed")
+            elif self._consecutive_losses >= self._limits.circuit_breaker_loss_streak:
                 self._open("consecutive_loss_streak")
 
     def check_drawdown_breach(self, drawdown_pct: float) -> None:

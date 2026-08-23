@@ -1,19 +1,18 @@
+from typing import Any, Dict, Union
+
 import numpy as np
 import pandas as pd
 
-from typing import Any
-from typing import Dict
-from typing import Union
-
 from pyrobot.stock_frame import StockFrame
+
 
 class Indicators():
 
     """
     Represents an Indicator Object which can be used
     to easily add technical indicators to a StockFrame.
-    """    
-    
+    """
+
     def __init__(self, price_data_frame: StockFrame) -> None:
         """Initalizes the Indicator Client.
 
@@ -21,7 +20,7 @@ class Indicators():
         ----
         price_data_frame {pyrobot.StockFrame} -- The price data frame which is used to add indicators to.
             At a minimum this data frame must have the following columns: `['timestamp','close','open','high','low']`.
-        
+
         Usage:
         ----
             >>> historical_prices_df = trading_robot.grab_historical_prices(
@@ -43,7 +42,7 @@ class Indicators():
 
         self._indicators_comp_key = []
         self._indicators_key = []
-        
+
         if self.is_multi_index:
             True
 
@@ -61,10 +60,10 @@ class Indicators():
 
         if indicator and indicator in self._indicator_signals:
             return self._indicator_signals[indicator]
-        else:      
+        else:
             return self._indicator_signals
-    
-    def set_indicator_signal(self, indicator: str, buy: float, sell: float, condition_buy: Any, condition_sell: Any, 
+
+    def set_indicator_signal(self, indicator: str, buy: float, sell: float, condition_buy: Any, condition_sell: Any,
                              buy_max: float = None, sell_max: float = None, condition_buy_max: Any = None, condition_sell_max: Any = None) -> None:
         """Used to set an indicator where one indicator crosses above or below a certain numerical threshold.
 
@@ -73,24 +72,24 @@ class Indicators():
         indicator {str} -- The indicator key, for example `ema` or `sma`.
 
         buy {float} -- The buy signal threshold for the indicator.
-        
+
         sell {float} -- The sell signal threshold for the indicator.
 
         condition_buy {str} -- The operator which is used to evaluate the `buy` condition. For example, `">"` would
             represent greater than or from the `operator` module it would represent `operator.gt`.
-        
+
         condition_sell {str} -- The operator which is used to evaluate the `sell` condition. For example, `">"` would
             represent greater than or from the `operator` module it would represent `operator.gt`.
 
         buy_max {float} -- If the buy threshold has a maximum value that needs to be set, then set the `buy_max` threshold.
             This means if the signal exceeds this amount it WILL NOT PURCHASE THE INSTRUMENT. (defaults to None).
-        
+
         sell_max {float} -- If the sell threshold has a maximum value that needs to be set, then set the `buy_max` threshold.
             This means if the signal exceeds this amount it WILL NOT SELL THE INSTRUMENT. (defaults to None).
 
         condition_buy_max {str} -- The operator which is used to evaluate the `buy_max` condition. For example, `">"` would
             represent greater than or from the `operator` module it would represent `operator.gt`. (defaults to None).
-        
+
         condition_sell_max {str} -- The operator which is used to evaluate the `sell_max` condition. For example, `">"` would
             represent greater than or from the `operator` module it would represent `operator.gt`. (defaults to None).
         """
@@ -98,16 +97,16 @@ class Indicators():
         # Add the key if it doesn't exist.
         if indicator not in self._indicator_signals:
             self._indicator_signals[indicator] = {}
-            self._indicators_key.append(indicator)      
+            self._indicators_key.append(indicator)
 
         # Add the signals.
-        self._indicator_signals[indicator]['buy'] = buy     
+        self._indicator_signals[indicator]['buy'] = buy
         self._indicator_signals[indicator]['sell'] = sell
         self._indicator_signals[indicator]['buy_operator'] = condition_buy
         self._indicator_signals[indicator]['sell_operator'] = condition_sell
 
         # Add the max signals
-        self._indicator_signals[indicator]['buy_max'] = buy_max  
+        self._indicator_signals[indicator]['buy_max'] = buy_max
         self._indicator_signals[indicator]['sell_max'] = sell_max
         self._indicator_signals[indicator]['buy_operator_max'] = condition_buy_max
         self._indicator_signals[indicator]['sell_operator_max'] = condition_sell_max
@@ -131,7 +130,7 @@ class Indicators():
 
         condition_buy {str} -- The operator which is used to evaluate the `buy` condition. For example, `">"` would
             represent greater than or from the `operator` module it would represent `operator.gt`.
-        
+
         condition_sell {str} -- The operator which is used to evaluate the `sell` condition. For example, `">"` would
             represent greater than or from the `operator` module it would represent `operator.gt`.
         """
@@ -145,7 +144,7 @@ class Indicators():
         # Add the key if it doesn't exist.
         if key not in self._indicator_signals:
             self._indicator_signals[key] = {}
-            self._indicators_comp_key.append(key)   
+            self._indicators_comp_key.append(key)
 
         # Grab the dictionary.
         indicator_dict = self._indicator_signals[key]
@@ -203,7 +202,7 @@ class Indicators():
 
         locals_data = locals()
         del locals_data['self']
-        
+
         self._current_indicators[column_name] = {}
         self._current_indicators[column_name]['args'] = locals_data
         self._current_indicators[column_name]['func'] = self.change_in_price
@@ -375,7 +374,7 @@ class Indicators():
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the ROC. (default: {1})
 
         Returns:
@@ -406,14 +405,14 @@ class Indicators():
             lambda x: x.pct_change(periods=period)
         )
 
-        return self._frame        
+        return self._frame
 
     def bollinger_bands(self, period: int = 20, column_name: str = 'bollinger_bands') -> pd.DataFrame:
         """Calculates the Bollinger Bands.
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the Bollinger Bands. (default: {20})
 
         Returns:
@@ -463,14 +462,14 @@ class Indicators():
             inplace=True
         )
 
-        return self._frame   
+        return self._frame
 
     def average_true_range(self, period: int = 14, column_name: str ='average_true_range') -> pd.DataFrame:
         """Calculates the Average True Range (ATR).
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the ATR. (default: {14})
 
         Returns:
@@ -553,17 +552,17 @@ class Indicators():
             (self._frame['high'] - self._frame['low']) * 100
         )
 
-        return self._frame 
+        return self._frame
 
     def macd(self, fast_period: int = 12, slow_period: int = 26, column_name: str = 'macd') -> pd.DataFrame:
         """Calculates the Moving Average Convergence Divergence (MACD).
 
         Arguments:
         ----
-        fast_period {int} -- The number of periods to use when calculating 
+        fast_period {int} -- The number of periods to use when calculating
             the fast moving MACD. (default: {12})
 
-        slow_period {int} -- The number of periods to use when calculating 
+        slow_period {int} -- The number of periods to use when calculating
             the slow moving MACD. (default: {26})
 
         Returns:
@@ -608,14 +607,14 @@ class Indicators():
             lambda x: x.ewm(span = 9, min_periods = 8).mean()
         )
 
-        return self._frame 
+        return self._frame
 
     def mass_index(self, period: int = 9, column_name: str = 'mass_index') -> pd.DataFrame:
         """Calculates the Mass Index indicator.
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the mass index. (default: {9})
 
         Returns:
@@ -654,7 +653,7 @@ class Indicators():
         self._frame['mass_index_2'] = self._frame['mass_index_1'].transform(
             lambda x: x.ewm(span = period, min_periods = period - 1).mean()
         )
-        
+
         # Grab the raw index.
         self._frame['mass_index_raw'] = self._frame['mass_index_1'] / self._frame['mass_index_2']
 
@@ -671,13 +670,13 @@ class Indicators():
         )
 
         return self._frame
-    
+
     def force_index(self, period: int, column_name: str = 'force_index') -> pd.DataFrame:
         """Calculates the Force Index.
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the force index.
 
         Returns:
@@ -714,7 +713,7 @@ class Indicators():
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the Ease of Movement.
 
         Returns:
@@ -740,7 +739,7 @@ class Indicators():
         self._current_indicators[column_name] = {}
         self._current_indicators[column_name]['args'] = locals_data
         self._current_indicators[column_name]['func'] = self.ease_of_movement
-        
+
         # Calculate the ease of movement.
         high_plus_low = (self._frame['high'].diff(1) + self._frame['low'].diff(1))
         diff_divi_vol = (self._frame['high'] - self._frame['low']) / (2 * self._frame['volume'])
@@ -765,7 +764,7 @@ class Indicators():
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the Commodity Channel Index.
 
         Returns:
@@ -827,7 +826,7 @@ class Indicators():
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the standard deviation.
 
         Returns:
@@ -866,7 +865,7 @@ class Indicators():
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the Chaikin Oscillator.
 
         Returns:
@@ -927,7 +926,7 @@ class Indicators():
 
         Arguments:
         ----
-        period {int} -- The number of periods to use when calculating 
+        period {int} -- The number of periods to use when calculating
             the mass index. (default: {9})
 
         Returns:
@@ -991,7 +990,7 @@ class Indicators():
         self._frame[column_name + "_signal"] = self._frame[column_name].transform(
             lambda x: x.rolling(window=9).mean()
         )
-        
+
         # Clean up before sending back.
         self._frame.drop(
             labels=['roc_1', 'roc_2', 'roc_3', 'roc_4', 'roc_1_n', 'roc_2_n', 'roc_3_n', 'roc_4_n'],
@@ -1009,7 +1008,7 @@ class Indicators():
 
         # Grab all the details of the indicators so far.
         for indicator in self._current_indicators:
-            
+
             # Grab the function.
             indicator_argument = self._current_indicators[indicator]['args']
 
@@ -1162,22 +1161,22 @@ class Indicators():
         return signals_df
 
 
-# #KST Oscillator  
-# def KST(df, r1, r2, r3, r4, n1, n2, n3, n4):  
-#     M = df['Close'].diff(r1 - 1)  
-#     N = df['Close'].shift(r1 - 1)  
-#     ROC1 = M / N  
-#     M = df['Close'].diff(r2 - 1)  
-#     N = df['Close'].shift(r2 - 1)  
-#     ROC2 = M / N  
-#     M = df['Close'].diff(r3 - 1)  
-#     N = df['Close'].shift(r3 - 1)  
-#     ROC3 = M / N  
-#     M = df['Close'].diff(r4 - 1)  
-#     N = df['Close'].shift(r4 - 1)  
-#     ROC4 = M / N  
+# #KST Oscillator
+# def KST(df, r1, r2, r3, r4, n1, n2, n3, n4):
+#     M = df['Close'].diff(r1 - 1)
+#     N = df['Close'].shift(r1 - 1)
+#     ROC1 = M / N
+#     M = df['Close'].diff(r2 - 1)
+#     N = df['Close'].shift(r2 - 1)
+#     ROC2 = M / N
+#     M = df['Close'].diff(r3 - 1)
+#     N = df['Close'].shift(r3 - 1)
+#     ROC3 = M / N
+#     M = df['Close'].diff(r4 - 1)
+#     N = df['Close'].shift(r4 - 1)
+#     ROC4 = M / N
 #     KST = pd.Series(pd.rolling_sum(ROC1, n1) + pd.rolling_sum(ROC2, n2) * 2 + pd.rolling_sum(ROC3, n3) * 3 +
 #  pd.rolling_sum(ROC4, n4) * 4, name = 'KST_' + str(r1) + '_' + str(r2) + '_' + str(r3) + '_' + str(r4) + '_' +
-#  str(n1) + '_' + str(n2) + '_' + str(n3) + '_' + str(n4))  
-#     df = df.join(KST)  
+#  str(n1) + '_' + str(n2) + '_' + str(n3) + '_' + str(n4))
+#     df = df.join(KST)
 #     return df

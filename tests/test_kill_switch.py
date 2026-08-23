@@ -1,12 +1,11 @@
 """Tests for pyrobot.risk.kill_switch — KillSwitch."""
 
-import pytest
 import threading
-import time
+
+import pytest
 
 from pyrobot.exceptions import KillSwitchError
 from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

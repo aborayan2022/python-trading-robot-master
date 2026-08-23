@@ -1,17 +1,26 @@
 """Model Registry and Governance for AI Quantitative Models."""
 
+import hashlib
 import json
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from pyrobot.exceptions import ModelNotApprovedError, ModelNotFoundError
+from pyrobot.ai.models import BaseQuantModel, model_class_for_type
+from pyrobot.exceptions import ModelNotFoundError
 from pyrobot.logging_config import get_logger
 
 logger = get_logger("model_registry")
+
+_SAFE_ID = re.compile(r"[^A-Za-z0-9._-]")
+
+
+class ArtifactIntegrityError(Exception):
+    """Raised when a stored model artifact is missing or fails its checksum."""
 
 
 class ModelStatus(str, Enum):
@@ -36,11 +45,13 @@ class ModelMetadata:
     training_end: str
     status: ModelStatus = ModelStatus.CANDIDATE
     oos_metrics: Dict[str, float] = field(default_factory=dict)
-    hyperparameters: Dict[str, any] = field(default_factory=dict)
+    hyperparameters: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     approved_by: Optional[str] = None
     approved_at: Optional[datetime] = None
     description: str = ""
+    artifact_path: Optional[str] = None
+    artifact_sha256: Optional[str] = None
 
     def to_dict(self) -> Dict:
         return {
@@ -58,6 +69,8 @@ class ModelMetadata:
             "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
             "description": self.description,
+            "artifact_path": self.artifact_path,
+            "artifact_sha256": self.artifact_sha256,
         }
 
     @classmethod
@@ -81,6 +94,8 @@ class ModelMetadata:
             approved_by=data.get("approved_by"),
             approved_at=approved_at,
             description=data.get("description", ""),
+            artifact_path=data.get("artifact_path"),
+            artifact_sha256=data.get("artifact_sha256"),
         )
 
 
@@ -111,17 +126,75 @@ class ModelRegistry:
     def _save_to_disk(self, meta: ModelMetadata) -> None:
         if not self.registry_dir:
             return
-        file_path = self.registry_dir / f"{meta.model_id}_{meta.version}.json"
+        safe_name = self._safe_filename(meta.model_id, meta.version)
+        file_path = self.registry_dir / f"{safe_name}.json"
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(meta.to_dict(), f, indent=2)
 
-    def register_model(self, metadata: ModelMetadata) -> None:
-        """Register a new candidate model in the registry."""
+    @staticmethod
+    def _safe_filename(model_id: str, version: str) -> str:
+        """Filesystem-safe artifact name (ids sanitized against path tricks)."""
+        return f"{_SAFE_ID.sub('_', model_id)}_{_SAFE_ID.sub('_', version)}"
+
+    def register_model(self, metadata: ModelMetadata, model: Optional[BaseQuantModel] = None) -> None:
+        """Register a candidate model; optionally persist its fitted artifact.
+
+        Args:
+            metadata: Descriptive metadata for governance.
+            model: Fitted model instance. When provided, its parameters are
+                written to a .npz artifact next to the metadata and the SHA-256
+                checksum is recorded so load_model() can verify integrity.
+        """
         with self._lock:
             key = f"{metadata.model_id}:{metadata.version}"
             self._models[key] = metadata
+
+            if model is not None:
+                if not getattr(model, "is_fitted", False):
+                    raise ValueError(
+                        f"Cannot register unfitted model {key} — fit() it first"
+                    )
+                if self.registry_dir is not None:
+                    safe_name = self._safe_filename(metadata.model_id, metadata.version)
+                    artifact_path = self.registry_dir / f"{safe_name}.npz"
+                    model.save(artifact_path)
+                    metadata.artifact_path = str(artifact_path)
+                    metadata.artifact_sha256 = self._sha256(artifact_path)
+
             self._save_to_disk(metadata)
-            logger.info("Registered model %s (type=%s, status=%s)", key, metadata.model_type, metadata.status.value)
+            logger.info(
+                "Registered model %s (type=%s, status=%s, artifact=%s)",
+                key, metadata.model_type, metadata.status.value,
+                "yes" if metadata.artifact_path else "no",
+            )
+
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def load_model(self, model_id: str, version: str) -> BaseQuantModel:
+        """Load a fitted model artifact by id and version, verifying its checksum."""
+        meta = self.get_model(model_id, version)
+        if not meta.artifact_path:
+            raise ArtifactIntegrityError(
+                f"Model {model_id}:{version} has no stored artifact "
+                "(registered metadata-only)"
+            )
+        artifact = Path(meta.artifact_path)
+        if not artifact.exists():
+            raise ArtifactIntegrityError(
+                f"Artifact for {model_id}:{version} is missing: {artifact}"
+            )
+        if meta.artifact_sha256 and self._sha256(artifact) != meta.artifact_sha256:
+            raise ArtifactIntegrityError(
+                f"Artifact checksum mismatch for {model_id}:{version} — tampered or corrupted"
+            )
+        model_cls = model_class_for_type(meta.model_type)
+        return model_cls.load(artifact)
 
     def get_model(self, model_id: str, version: str) -> ModelMetadata:
         """Retrieve model metadata by ID and version."""

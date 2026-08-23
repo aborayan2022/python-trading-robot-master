@@ -26,10 +26,9 @@ Usage::
     )
 """
 
-import math
 
-from pyrobot.risk.limits import RiskLimits
 from pyrobot.logging_config import get_logger
+from pyrobot.risk.limits import RiskLimits
 
 logger = get_logger("position_sizer")
 

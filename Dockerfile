@@ -30,11 +30,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import pyrobot; print('ok')" || exit 1
+    CMD python -c "from pyrobot.runtime import TradingLoop; print('ok')" || exit 1
 
 USER trader
 
-CMD ["python", "-c", "import pyrobot; print('pyrobot loaded ok')"]
+# Paper-mode replay trading loop (see pyrobot/runtime/loop.py for env vars).
+# This actually trades: signals → risk gates → paper fills → audit ledger.
+CMD ["python", "-m", "pyrobot.runtime.loop"]
 
 # ── Stage 3: Test (includes tests) ────────────────────────────────
 FROM runtime AS test

@@ -1,5 +1,6 @@
 from pyrobot.trades import Trade
 
+
 class OrderStatus():
 
     def __init__(self, trade_obj: Trade) -> None:
@@ -14,7 +15,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -40,7 +41,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -66,7 +67,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -92,7 +93,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -118,7 +119,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -144,14 +145,14 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
         Returns
         -------
         bool
-            `True` if the order status is `PENDING_ACTIVATION`, 
+            `True` if the order status is `PENDING_ACTIVATION`,
             `False` otherwise.
         """
 
@@ -170,14 +171,14 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
         Returns
         -------
         bool
-            `True` if the order status is `PENDING_CANCEL`, 
+            `True` if the order status is `PENDING_CANCEL`,
             `False` otherwise.
         """
 
@@ -196,14 +197,14 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
         Returns
         -------
         bool
-            `True` if the order status is `PENDING_REPLACE`, 
+            `True` if the order status is `PENDING_REPLACE`,
             `False` otherwise.
         """
 
@@ -222,7 +223,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -248,7 +249,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -275,7 +276,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 
@@ -302,7 +303,7 @@ class OrderStatus():
         Arguments:
         ----
         refresh_order_info {bool} -- Specifies whether you want
-            to refresh the order data from the TD API before 
+            to refresh the order data from the TD API before
             checking. If `True` a request will be made to the
             TD API to grab the latest Order Info.
 

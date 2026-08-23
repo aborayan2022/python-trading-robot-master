@@ -4,6 +4,7 @@
 
 - [Overview](#overview)
 - [What's New in v0.2.0](#whats-new-in-v020)
+- [Runtime Trading Loop](#runtime-trading-loop)
 - [Setup](#setup)
 - [Quickstart](#quickstart)
 - [Supported Brokers](#supported-brokers)
@@ -21,6 +22,18 @@ A trading robot written in Python that can run automated strategies using techni
 - **Trade** — Defines orders (market, limit, stop, bracket) with legs, stop losses, and take profits.
 - **StockFrame** — Real-time multi-index DataFrame storing historical and live OHLCV data.
 - **Indicators** — Calculates technical indicators (RSI, Bollinger Bands, Stochastic, CCI, KST, ADX, VWAP, Ichimoku Cloud, OBV, and more).
+
+## Runtime Trading Loop
+
+The full connected path — data → features/signals → risk gates → execution → tamper-evident audit — runs as one loop:
+
+```bash
+# Paper-mode replay demo (no broker account, no real money)
+PYROBOT_SYMBOLS=MSFT,AAPL PYROBOT_BARS=500 PYROBOT_SIGNAL_SOURCE=example \
+    python -m pyrobot.runtime.loop
+```
+
+The audit trail lands in `data/audit/ledger.jsonl` as a verifiable SHA-256 hash chain that survives restarts. `TradingPipeline` / `TradingLoop` (`pyrobot/runtime/`) are the integration points for live bar providers. See `IMPLEMENTATION_STATUS.md` for the roadmap state.
 
 ## What's New in v0.2.0
 

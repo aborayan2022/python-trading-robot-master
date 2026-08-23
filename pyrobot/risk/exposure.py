@@ -17,15 +17,19 @@ Usage::
         account_equity=100_000.0,
     )
 
-    if not monitor.check_order(exposure, "TSLA", "BUY", 100, 200.0, 100_000.0):
+    if not monitor.check_order(
+        exposure, "TSLA", "BUY", 100, 200.0, 100_000.0, positions=positions
+    ):
         raise ExposureLimitError(...)
 """
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
-from pyrobot.risk.limits import RiskLimits
+import pandas as pd
+
 from pyrobot.logging_config import get_logger
+from pyrobot.risk.limits import RiskLimits
 
 logger = get_logger("exposure_monitor")
 
@@ -51,15 +55,48 @@ class ExposureMonitor:
     Args:
         limits: RiskLimits configuration.
         sector_map: Optional mapping of symbol → sector name.
+        volatility_by_symbol: Optional mapping of symbol → annualized
+            volatility. When provided (and the symbol is present), orders
+            are rejected if the volatility exceeds
+            limits.max_volatility_threshold.
+        correlation_matrix: Optional symmetric DataFrame of pairwise
+            symbol correlations. When provided together with current
+            positions, an order is rejected if the symbol's absolute
+            correlation with any currently held symbol exceeds
+            limits.max_correlation_threshold.
     """
 
     def __init__(
         self,
         limits: RiskLimits | None = None,
         sector_map: Dict[str, str] | None = None,
+        volatility_by_symbol: Dict[str, float] | None = None,
+        correlation_matrix: Optional[pd.DataFrame] = None,
     ) -> None:
         self._limits = limits or RiskLimits()
         self._sector_map = sector_map or {}
+        self._volatility_by_symbol = volatility_by_symbol
+        self._correlation_matrix = correlation_matrix
+
+    def set_volatility_by_symbol(
+        self, volatility_by_symbol: Dict[str, float] | None
+    ) -> None:
+        """Set or clear the per-symbol volatility map.
+
+        Args:
+            volatility_by_symbol: Symbol → annualized volatility, or None
+                to disable volatility enforcement.
+        """
+        self._volatility_by_symbol = volatility_by_symbol
+
+    def set_correlation_matrix(self, correlation_matrix: pd.DataFrame | None) -> None:
+        """Set or clear the pairwise correlation matrix.
+
+        Args:
+            correlation_matrix: Symmetric DataFrame indexed by symbol on
+                both axes, or None to disable correlation enforcement.
+        """
+        self._correlation_matrix = correlation_matrix
 
     def calculate_exposure(
         self,
@@ -119,8 +156,15 @@ class ExposureMonitor:
         quantity: float,
         price: float,
         account_equity: float,
+        positions: Dict[str, float] | None = None,
     ) -> tuple[bool, str]:
         """Check if an order would breach exposure limits.
+
+        Orders are projected against current holdings so that risk-reducing
+        orders are not penalized: a SELL against an existing long reduces
+        long exposure (only the excess beyond the holding opens short), a
+        BUY against an existing short covers it (only the excess adds
+        long).
 
         Args:
             current_exposure: Current ExposureSnapshot.
@@ -129,29 +173,30 @@ class ExposureMonitor:
             quantity: Order quantity.
             price: Order price per share.
             account_equity: Total portfolio equity.
+            positions: Current holdings (symbol → quantity, positive =
+                long, negative = short). When omitted, the projection
+                falls back to portfolio-level long/short totals.
 
         Returns:
             Tuple of (is_allowed, reason_string).
         """
         order_value = quantity * price
+        is_buy = side in ("BUY", "BUY_TO_COVER")
 
-        # Projected exposure after order
-        if side in ("BUY", "BUY_TO_COVER"):
-            new_long = current_exposure.long_value + order_value
-            new_short = current_exposure.short_value
-        else:  # SELL or SELL_SHORT
-            new_long = current_exposure.long_value
-            new_short = current_exposure.short_value + order_value
-
-        new_gross = new_long + new_short
-        new_symbol_count = current_exposure.symbol_count
-        if side in ("BUY", "BUY_TO_COVER"):
-            new_symbol_count += 1
+        (
+            new_long,
+            new_short,
+            new_symbol_count,
+            sector_delta,
+            exposure_increase,
+        ) = self._project_order(
+            current_exposure, symbol, order_value, price, is_buy, positions
+        )
 
         equity = max(account_equity, 1.0)
 
         # Check gross exposure
-        gross_pct = new_gross / equity
+        gross_pct = (new_long + new_short) / equity
         if gross_pct > self._limits.max_portfolio_exposure_pct:
             return False, (
                 f"Gross exposure {gross_pct:.2%} would exceed limit "
@@ -181,18 +226,20 @@ class ExposureMonitor:
                 f"{self._limits.max_symbol_count}"
             )
 
-        # Check per-symbol position size limit
-        pos_size_pct = order_value / equity
+        # Check per-symbol position size limit — only the exposure-
+        # increasing portion counts (closing/covering orders reduce risk).
+        pos_size_pct = exposure_increase / equity
         if pos_size_pct > self._limits.max_position_size_pct:
             return False, (
                 f"Position size {pos_size_pct:.2%} of equity would exceed limit "
                 f"{self._limits.max_position_size_pct:.2%}"
             )
 
-        # Check sector concentration
+        # Check sector concentration — only the exposure-increasing side
+        # adds; reductions release concentration headroom.
         sector = self._sector_map.get(symbol, "UNKNOWN")
         current_sector = current_exposure.sector_exposure.get(sector, 0.0)
-        new_sector_value = current_sector + order_value
+        new_sector_value = max(current_sector + sector_delta, 0.0)
         sector_pct = new_sector_value / equity
         if sector_pct > self._limits.max_sector_concentration_pct:
             return False, (
@@ -208,7 +255,157 @@ class ExposureMonitor:
                     f"${self._limits.max_single_order_value:,.2f}"
                 )
 
+        # Check per-symbol volatility limit
+        vol_rejection = self._check_volatility(symbol)
+        if vol_rejection is not None:
+            return False, vol_rejection
+
+        # Check correlation against currently held symbols
+        corr_rejection = self._check_correlation(symbol, positions)
+        if corr_rejection is not None:
+            return False, corr_rejection
+
         return True, "OK"
+
+    def _project_order(
+        self,
+        current_exposure: ExposureSnapshot,
+        symbol: str,
+        order_value: float,
+        price: float,
+        is_buy: bool,
+        positions: Dict[str, float] | None,
+    ) -> tuple[float, float, int, float, float]:
+        """Project portfolio state after an order executes.
+
+        Args:
+            current_exposure: Current ExposureSnapshot.
+            symbol: Ticker symbol for the new order.
+            order_value: Dollar value of the order (quantity * price).
+            price: Order price per share.
+            is_buy: True for BUY/BUY_TO_COVER, False for SELL/SELL_SHORT.
+            positions: Current holdings, or None for the portfolio-level
+                fallback projection.
+
+        Returns:
+            Tuple of (new_long_value, new_short_value, new_symbol_count,
+            sector_delta, exposure_increase) where sector_delta is the
+            change in the order symbol's sector exposure and
+            exposure_increase is the portion of the order that adds
+            gross exposure.
+        """
+        if positions is not None:
+            held_qty = float(positions.get(symbol, 0.0))
+            held_long_value = max(held_qty, 0.0) * price
+            held_short_value = max(-held_qty, 0.0) * price
+            symbol_held = held_qty != 0.0
+        else:
+            # No per-symbol data — fall back to portfolio-level totals so
+            # closing orders are still recognized as risk-reducing.
+            held_long_value = current_exposure.long_value
+            held_short_value = current_exposure.short_value
+            symbol_held = False
+
+        if is_buy:
+            # BUY against an existing short covers it first; only the
+            # excess beyond the short adds long exposure.
+            short_reduce = min(order_value, held_short_value)
+            long_add = order_value - short_reduce
+            long_reduce = 0.0
+            short_add = 0.0
+        else:
+            # SELL against an existing long reduces it first; only the
+            # excess beyond the holding opens short exposure.
+            long_reduce = min(order_value, held_long_value)
+            short_add = order_value - long_reduce
+            short_reduce = 0.0
+            long_add = 0.0
+
+        new_long = max(current_exposure.long_value - long_reduce, 0.0) + long_add
+        new_short = max(current_exposure.short_value - short_reduce, 0.0) + short_add
+
+        new_symbol_count = current_exposure.symbol_count
+        if is_buy and long_add > 0 and not symbol_held:
+            new_symbol_count += 1
+
+        sector_delta = (long_add + short_add) - (long_reduce + short_reduce)
+        exposure_increase = long_add + short_add
+
+        return new_long, new_short, new_symbol_count, sector_delta, exposure_increase
+
+    def _check_volatility(self, symbol: str) -> Optional[str]:
+        """Check the symbol's volatility against the configured limit.
+
+        Args:
+            symbol: Ticker symbol for the new order.
+
+        Returns:
+            Rejection reason string, or None if the order passes (or no
+            volatility data is available).
+        """
+        if self._volatility_by_symbol is None:
+            return None
+        volatility = self._volatility_by_symbol.get(symbol)
+        if volatility is None:
+            return None
+        if volatility > self._limits.max_volatility_threshold:
+            return (
+                f"Volatility {volatility:.2%} for {symbol} exceeds limit "
+                f"{self._limits.max_volatility_threshold:.2%}"
+            )
+        return None
+
+    def _check_correlation(
+        self,
+        symbol: str,
+        positions: Dict[str, float] | None,
+    ) -> Optional[str]:
+        """Check correlation between the symbol and currently held symbols.
+
+        Args:
+            symbol: Ticker symbol for the new order.
+            positions: Current holdings (used to determine held symbols).
+
+        Returns:
+            Rejection reason string, or None if the order passes (or no
+            correlation matrix / positions are available).
+        """
+        if self._correlation_matrix is None or not positions:
+            return None
+        threshold = self._limits.max_correlation_threshold
+        held_symbols = [s for s, q in positions.items() if q != 0 and s != symbol]
+        for held_symbol in held_symbols:
+            correlation = self._pair_correlation(symbol, held_symbol)
+            if correlation is None:
+                continue
+            if abs(correlation) > threshold:
+                return (
+                    f"Correlation {correlation:.2f} between {symbol} and held "
+                    f"{held_symbol} exceeds limit {threshold:.2f}"
+                )
+        return None
+
+    def _pair_correlation(self, symbol: str, held_symbol: str) -> Optional[float]:
+        """Look up the pairwise correlation for two symbols.
+
+        Args:
+            symbol: Ticker symbol for the new order.
+            held_symbol: Currently held ticker symbol.
+
+        Returns:
+            Correlation coefficient, or None if unavailable in the matrix.
+        """
+        matrix = self._correlation_matrix
+        if matrix is None:
+            return None
+        try:
+            value = matrix.loc[symbol, held_symbol]
+        except KeyError:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     def __repr__(self) -> str:
         return (

@@ -1,3 +1,12 @@
+# Default profile (`docker compose up`): the paper trading bot only.
+# Postgres/Redis/Grafana are NOT consumed by any code yet — they live behind
+# the "full" profile until real persistence/metrics backends are wired in,
+# so the default stack runs only what is real (P0 honesty rule).
+#
+#   docker compose up                          # paper bot only
+#   docker compose --profile full up           # + postgres/redis/grafana
+#   docker compose run --rm test               # full test suite
+
 services:
   bot:
     build:
@@ -8,17 +17,15 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - POSTGRES_HOST=postgres
-      - REDIS_HOST=redis
+      - PYROBOT_SYMBOLS=${PYROBOT_SYMBOLS:-MSFT,AAPL}
+      - PYROBOT_BARS=${PYROBOT_BARS:-2000}
+      - PYROBOT_MODE=${PYROBOT_MODE:-paper}
+      - PYROBOT_BALANCE=${PYROBOT_BALANCE:-100000}
+      - PYROBOT_BAR_INTERVAL=${PYROBOT_BAR_INTERVAL:-1.0}
+      - PYROBOT_AUDIT_PATH=/app/data/audit/ledger.jsonl
     volumes:
       - bot-data:/app/data
       - bot-logs:/app/logs
-      - ./config:/app/config:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - trading-net
     deploy:
@@ -36,10 +43,7 @@ services:
       dockerfile: Dockerfile
       target: test
     container_name: pyrobot-test
-    env_file: .env
-    environment:
-      - POSTGRES_HOST=postgres
-      - REDIS_HOST=redis
+    profiles: ["test"]
     networks:
       - trading-net
 
@@ -47,6 +51,7 @@ services:
     image: postgres:16.3-alpine
     container_name: pyrobot-postgres
     restart: unless-stopped
+    profiles: ["full"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-trading}
       POSTGRES_USER: ${POSTGRES_USER:-trader}
@@ -65,6 +70,7 @@ services:
     image: redis:7.4-alpine
     container_name: pyrobot-redis
     restart: unless-stopped
+    profiles: ["full"]
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
@@ -80,6 +86,7 @@ services:
     image: grafana/grafana:11.1.0
     container_name: pyrobot-grafana
     restart: unless-stopped
+    profiles: ["full"]
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     environment:

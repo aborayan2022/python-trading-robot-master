@@ -18,6 +18,7 @@ Usage::
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from pyrobot.audit.ledger import AuditAction, AuditLedger
 from pyrobot.brokers.base import BrokerInterface
 from pyrobot.exceptions import BrokerError, ReconciliationError
 from pyrobot.execution.order_manager import OrderManager
@@ -55,6 +56,8 @@ class OrderReconciler:
         account_id: Broker account identifier.
         max_reconcile_age_secs: Only reconcile orders younger than this many
             seconds.  Set to 0 to disable age filtering.
+        audit_ledger: Optional :class:`AuditLedger` — when provided, fills
+            confirmed during reconciliation record an ORDER_FILLED event.
     """
 
     def __init__(
@@ -63,11 +66,13 @@ class OrderReconciler:
         broker: BrokerInterface,
         account_id: str = "",
         max_reconcile_age_secs: float = 86_400,  # 24 hours
+        audit_ledger: Optional[AuditLedger] = None,
     ) -> None:
         self._order_manager = order_manager
         self._broker = broker
         self._account_id = account_id
         self._max_age = max_reconcile_age_secs
+        self._audit_ledger = audit_ledger
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -172,33 +177,64 @@ class OrderReconciler:
         filled_qty: float,
         avg_price: float,
     ) -> None:
-        """Apply the reconciled state to the order via OrderManager."""
+        """Apply the reconciled state to the order via OrderManager.
+
+        Resolution MUST go through :meth:`OrderManager.resolve_unknown` so
+        the state machine (and its lock) validates the UNKNOWN → X
+        transition — the order's status is never mutated directly here.
+        """
         coid = order.client_order_id
 
-        # Force override the UNKNOWN state to the reconciled state by
-        # temporarily setting the order status to allow the transition.
-        # The OrderManager's _transition validates UNKNOWN → X transitions
-        # only if listed; we patch the order directly for reconciliation.
-        order.status = OrderState.SUBMITTED  # Unlock from UNKNOWN
-
         if new_state == OrderState.FILLED:
-            self._order_manager.mark_filled(coid, filled_qty, avg_price)
+            self._order_manager.resolve_unknown(
+                coid, OrderState.FILLED, filled_qty, avg_price
+            )
+            self._record_fill(order, filled_qty, avg_price, partial=False)
         elif new_state == OrderState.PARTIALLY_FILLED:
-            self._order_manager.mark_partially_filled(coid, filled_qty, avg_price)
+            self._order_manager.resolve_unknown(
+                coid, OrderState.PARTIALLY_FILLED, filled_qty, avg_price
+            )
+            self._record_fill(order, filled_qty, avg_price, partial=True)
         elif new_state == OrderState.CANCELLED:
-            self._order_manager.mark_cancelled(coid)
+            self._order_manager.resolve_unknown(coid, OrderState.CANCELLED)
         elif new_state == OrderState.REJECTED:
-            self._order_manager.mark_rejected(coid, reason="reconciled from broker")
-        elif new_state == OrderState.ACKNOWLEDGED:
-            self._order_manager.mark_acknowledged(coid)
+            self._order_manager.resolve_unknown(coid, OrderState.REJECTED)
+        elif new_state == OrderState.EXPIRED:
+            self._order_manager.resolve_unknown(coid, OrderState.EXPIRED)
+        elif new_state == OrderState.SUBMITTED:
+            self._order_manager.resolve_unknown(coid, OrderState.SUBMITTED)
         else:
-            # Still UNKNOWN — reset and log
-            order.status = OrderState.UNKNOWN
+            # ACKNOWLEDGED or still UNKNOWN — not a resolvable state via
+            # the reconciliation path; leave as-is for manual review.
             logger.warning(
                 "Order %r remains UNKNOWN after reconciliation — "
-                "broker returned unresolvable status.",
+                "broker returned unresolvable status %s.",
                 coid,
+                new_state.value,
             )
+
+    def _record_fill(
+        self,
+        order: Order,
+        filled_qty: float,
+        avg_price: float,
+        partial: bool = False,
+    ) -> None:
+        """Record an ORDER_FILLED audit event for a reconciliation-confirmed fill."""
+        if self._audit_ledger is None:
+            return
+        self._audit_ledger.record(
+            action=AuditAction.ORDER_FILLED,
+            symbol=order.symbol,
+            order_id=order.client_order_id,
+            strategy_id=order.strategy_id,
+            details={
+                "filled_quantity": filled_qty,
+                "avg_fill_price": avg_price,
+                "partial": partial,
+                "source": "reconciliation",
+            },
+        )
 
     def _is_too_old(self, order: Order) -> bool:
         """Return True if the order is older than max_reconcile_age_secs."""

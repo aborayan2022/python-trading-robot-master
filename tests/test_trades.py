@@ -1,6 +1,5 @@
 """Tests for the Trade class."""
 
-import pytest
 
 from pyrobot.trades import Trade
 

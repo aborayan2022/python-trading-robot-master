@@ -94,7 +94,6 @@ class TestPortfolio:
         assert len(result["fixed_income"]) == 1
 
     def test_portfolio_variance(self):
-        import numpy as np
         import pandas as pd
 
         portfolio = Portfolio()

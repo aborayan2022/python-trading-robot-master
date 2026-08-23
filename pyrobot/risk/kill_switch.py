@@ -32,7 +32,6 @@ Usage::
 """
 
 import threading
-
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional

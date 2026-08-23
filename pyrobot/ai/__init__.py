@@ -1,21 +1,43 @@
 """AI & Machine Learning quantitative intelligence package."""
 
-from pyrobot.ai.registry import ModelRegistry, ModelMetadata, ModelStatus
-from pyrobot.ai.models import BaseQuantModel, GBDTDirectionClassifier, VolatilityForecaster
-from pyrobot.ai.ensemble import EnsembleSignalEngine
+from pyrobot.ai.context import (
+    LexiconSentimentEngine,
+    LLMContextEngine,
+    NewsEventType,
+    SentimentAnalysis,
+)
 from pyrobot.ai.drift import DriftDetector, DriftReport
-from pyrobot.ai.context import LLMContextEngine, SentimentAnalysis, NewsEventType
+from pyrobot.ai.ensemble import EnsembleSignalEngine
+from pyrobot.ai.labels import LabelBuilder
+from pyrobot.ai.models import (
+    BaseQuantModel,
+    GBDTDirectionClassifier,
+    LogisticDirectionModel,
+    VolatilityForecaster,
+    model_class_for_type,
+)
+from pyrobot.ai.registry import (
+    ArtifactIntegrityError,
+    ModelMetadata,
+    ModelRegistry,
+    ModelStatus,
+)
 
 __all__ = [
     "ModelRegistry",
     "ModelMetadata",
     "ModelStatus",
+    "ArtifactIntegrityError",
     "BaseQuantModel",
+    "LogisticDirectionModel",
     "GBDTDirectionClassifier",
     "VolatilityForecaster",
+    "model_class_for_type",
     "EnsembleSignalEngine",
     "DriftDetector",
     "DriftReport",
+    "LabelBuilder",
+    "LexiconSentimentEngine",
     "LLMContextEngine",
     "SentimentAnalysis",
     "NewsEventType",

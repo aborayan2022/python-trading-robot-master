@@ -1,13 +1,14 @@
 """Feature Engine — Central coordinator for Quantitative Feature Engineering."""
 
 from typing import List, Optional
+
 import pandas as pd
 
 from pyrobot.features.base import BaseFeatureExtractor
+from pyrobot.features.momentum import MomentumFeatures
+from pyrobot.features.regime import MarketRegimeDetector
 from pyrobot.features.technical import TechnicalFeatures
 from pyrobot.features.volatility import VolatilityFeatures
-from pyrobot.features.momentum import MomentumFeatures
-from pyrobot.features.regime import MarketRegimeDetector, RegimeState
 from pyrobot.logging_config import get_logger
 
 logger = get_logger("feature_engine")

@@ -12,7 +12,6 @@ Non-retryable errors (never retried):
 
 import random
 import time
-
 from functools import wraps
 from typing import Any, Callable, Optional, Tuple, Type
 
@@ -59,8 +58,10 @@ def is_retryable_exception(exc: Exception) -> bool:
         True if the exception is retryable, False otherwise.
     """
     from pyrobot.exceptions import (
-        RETRYABLE_EXCEPTIONS as DOMAIN_RETRYABLE,
         NON_RETRYABLE_EXCEPTIONS as DOMAIN_NON_RETRYABLE,
+    )
+    from pyrobot.exceptions import (
+        RETRYABLE_EXCEPTIONS as DOMAIN_RETRYABLE,
     )
 
     # Platform-level: non-retryable takes priority

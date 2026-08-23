@@ -1,22 +1,23 @@
 """Tests for pyrobot.execution — ExecutionEngine and OrderManager."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+import pytest
+
+from pyrobot.audit.ledger import AuditAction, AuditLedger
 from pyrobot.exceptions import (
-    KillSwitchError,
     DuplicateOrderError,
     ExecutionError,
+    KillSwitchError,
     OrderRejectedError,
     OrderStateError,
 )
 from pyrobot.execution.engine import ExecutionEngine
 from pyrobot.execution.order_manager import OrderManager
 from pyrobot.execution.reconciliation import OrderReconciler
-from pyrobot.models.order import Order, OrderSide, OrderType, TimeInForce, OrderState
+from pyrobot.models.order import Order, OrderSide, OrderState, OrderType
 from pyrobot.models.signal import Signal, SignalAction
 from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
-
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -31,6 +32,11 @@ def order_manager() -> OrderManager:
 
 
 @pytest.fixture
+def audit_ledger() -> AuditLedger:
+    return AuditLedger()
+
+
+@pytest.fixture
 def mock_broker():
     broker = MagicMock()
     broker.place_order.return_value = {
@@ -38,6 +44,7 @@ def mock_broker():
         "status": "SUBMITTED",
         "request_body": {},
     }
+    broker.cancel_order.return_value = True
     broker.get_order_status.return_value = {
         "order_id": "broker-001",
         "status": "filled",
@@ -48,14 +55,23 @@ def mock_broker():
 
 
 @pytest.fixture
-def engine(mock_broker, order_manager, kill_switch) -> ExecutionEngine:
-    return ExecutionEngine(
+def engine(mock_broker, order_manager, kill_switch, audit_ledger) -> ExecutionEngine:
+    engine = ExecutionEngine(
         broker=mock_broker,
         order_manager=order_manager,
         kill_switch=kill_switch,
         account_id="TEST_ACCOUNT",
         max_retries=1,
+        audit_ledger=audit_ledger,
     )
+    # The engine fails closed when it cannot value an order, so every
+    # submitting test needs a price for the order's symbol.
+    engine.set_risk_context(
+        positions={},
+        prices={"AAPL": 150.0},
+        equity=100_000.0,
+    )
+    return engine
 
 
 @pytest.fixture
@@ -185,6 +201,60 @@ class TestOrderManager:
         order_manager.mark_filled(order.client_order_id, 5.0, 200.0)
         assert order.is_terminal is True
 
+    def test_mark_cancel_pending_from_acknowledged(self, order_manager, buy_signal):
+        order = order_manager.create_from_signal(buy_signal, quantity=5)
+        order_manager.mark_submitted(order.client_order_id, "b-1")
+        order_manager.mark_acknowledged(order.client_order_id)
+        order_manager.mark_cancel_pending(order.client_order_id)
+        assert order.status == OrderState.CANCEL_PENDING
+        order_manager.mark_cancelled(order.client_order_id)
+        assert order.status == OrderState.CANCELLED
+
+    def test_mark_cancel_pending_from_submitted(self, order_manager, buy_signal):
+        order = order_manager.create_from_signal(buy_signal, quantity=5)
+        order_manager.mark_submitted(order.client_order_id, "b-1")
+        order_manager.mark_cancel_pending(order.client_order_id)
+        assert order.status == OrderState.CANCEL_PENDING
+
+    def test_resolve_unknown_to_filled_applies_fill_data(self, order_manager, buy_signal):
+        order = order_manager.create_from_signal(buy_signal, quantity=5)
+        order_manager.mark_submitted(order.client_order_id, "b-1")
+        order_manager.mark_unknown(order.client_order_id, "timeout")
+
+        order_manager.resolve_unknown(
+            order.client_order_id, OrderState.FILLED, filled_qty=5.0, avg_price=151.0
+        )
+
+        assert order.status == OrderState.FILLED
+        assert order.filled_quantity == 5.0
+        assert order.avg_fill_price == 151.0
+
+    def test_resolve_unknown_to_cancelled(self, order_manager, buy_signal):
+        order = order_manager.create_from_signal(buy_signal, quantity=5)
+        order_manager.mark_submitted(order.client_order_id, "b-1")
+        order_manager.mark_unknown(order.client_order_id, "timeout")
+
+        order_manager.resolve_unknown(order.client_order_id, OrderState.CANCELLED)
+
+        assert order.status == OrderState.CANCELLED
+
+    def test_resolve_unknown_requires_unknown_state(self, order_manager, buy_signal):
+        order = order_manager.create_from_signal(buy_signal, quantity=5)
+        order_manager.mark_submitted(order.client_order_id, "b-1")
+
+        with pytest.raises(OrderStateError, match="requires current state UNKNOWN"):
+            order_manager.resolve_unknown(order.client_order_id, OrderState.FILLED)
+
+    def test_resolve_unknown_rejects_non_reconcilable_state(self, order_manager, buy_signal):
+        order = order_manager.create_from_signal(buy_signal, quantity=5)
+        order_manager.mark_submitted(order.client_order_id, "b-1")
+        order_manager.mark_unknown(order.client_order_id, "timeout")
+
+        with pytest.raises(OrderStateError, match="Cannot resolve UNKNOWN"):
+            order_manager.resolve_unknown(order.client_order_id, OrderState.ACKNOWLEDGED)
+
+        assert order.status == OrderState.UNKNOWN
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ExecutionEngine Tests
@@ -254,6 +324,7 @@ class TestExecutionEngine:
             account_id="TEST",
             dry_run=True,
         )
+        dry_engine.set_risk_context(positions={}, prices={"AAPL": 150.0}, equity=100_000.0)
         order = order_manager.create_from_signal(buy_signal, quantity=5)
         response = dry_engine.submit(order)
         mock_broker.place_order.assert_not_called()
@@ -276,6 +347,201 @@ class TestExecutionEngine:
         )
         with pytest.raises(ValueError, match="limit_price"):
             engine.submit(order)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ExecutionEngine — Cancel / Poll / Audit Tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestExecutionEngineCancel:
+
+    def test_cancel_order_happy_path(self, engine, mock_broker, buy_order):
+        engine.submit(buy_order)
+
+        result = engine.cancel_order(buy_order.client_order_id)
+
+        assert result is True
+        mock_broker.cancel_order.assert_called_once_with("broker-001")
+        assert buy_order.status == OrderState.CANCELLED
+
+        events = engine.audit_ledger.get_events(action=AuditAction.ORDER_CANCELLED)
+        assert len(events) == 1
+        assert events[0].order_id == buy_order.client_order_id
+        assert events[0].details["broker_order_id"] == "broker-001"
+
+    def test_cancel_order_transitions_through_cancel_pending(self, engine, mock_broker, buy_order):
+        engine.submit(buy_order)
+
+        states: list[OrderState] = []
+
+        def spy_cancel(order_id: str) -> bool:
+            states.append(buy_order.status)
+            return True
+
+        mock_broker.cancel_order.side_effect = spy_cancel
+        engine.cancel_order(buy_order.client_order_id)
+
+        assert states == [OrderState.CANCEL_PENDING]
+        assert buy_order.status == OrderState.CANCELLED
+
+    def test_cancel_order_broker_refusal_leaves_cancel_pending(
+        self, engine, mock_broker, buy_order
+    ):
+        engine.submit(buy_order)
+        mock_broker.cancel_order.return_value = False
+
+        with pytest.raises(ExecutionError, match="refused"):
+            engine.cancel_order(buy_order.client_order_id)
+
+        assert buy_order.status == OrderState.CANCEL_PENDING
+
+    def test_cancel_order_broker_error_leaves_cancel_pending(self, engine, mock_broker, buy_order):
+        from pyrobot.exceptions import BrokerConnectionError
+
+        engine.submit(buy_order)
+        mock_broker.cancel_order.side_effect = BrokerConnectionError("socket closed")
+
+        with pytest.raises(ExecutionError, match="Broker error"):
+            engine.cancel_order(buy_order.client_order_id)
+
+        assert buy_order.status == OrderState.CANCEL_PENDING
+
+    def test_cancel_unknown_client_order_id_raises(self, engine):
+        with pytest.raises(ExecutionError, match="unknown client_order_id"):
+            engine.cancel_order("does-not-exist")
+
+    def test_cancel_new_order_raises(self, engine, buy_order):
+        with pytest.raises(ExecutionError, match="not been submitted"):
+            engine.cancel_order(buy_order.client_order_id)
+
+    def test_cancel_filled_order_raises(self, engine, mock_broker, buy_order):
+        engine.submit(buy_order)
+        mock_broker.get_order_status.return_value = {
+            "order_id": "broker-001",
+            "status": "filled",
+            "filled_quantity": 10.0,
+            "avg_fill_price": 150.0,
+        }
+        engine.poll_status(buy_order.client_order_id)
+
+        with pytest.raises(ExecutionError, match="terminal state"):
+            engine.cancel_order(buy_order.client_order_id)
+
+
+class TestExecutionEnginePollStatus:
+
+    def test_poll_status_fill_records_order_filled_audit(self, engine, mock_broker, buy_order):
+        engine.submit(buy_order)
+        mock_broker.get_order_status.return_value = {
+            "order_id": "broker-001",
+            "status": "filled",
+            "filled_quantity": 10.0,
+            "avg_fill_price": 150.0,
+        }
+
+        status = engine.poll_status(buy_order.client_order_id)
+
+        assert status["status"] == "filled"
+        assert buy_order.status == OrderState.FILLED
+        assert buy_order.filled_quantity == 10.0
+        assert buy_order.avg_fill_price == 150.0
+
+        events = engine.audit_ledger.get_events(action=AuditAction.ORDER_FILLED)
+        assert len(events) == 1
+        assert events[0].order_id == buy_order.client_order_id
+        assert events[0].details["filled_quantity"] == 10.0
+        assert events[0].details["avg_fill_price"] == 150.0
+        assert events[0].details["partial"] is False
+
+    def test_poll_status_partial_fill_records_partial_audit(self, engine, mock_broker, buy_order):
+        engine.submit(buy_order)
+        mock_broker.get_order_status.return_value = {
+            "order_id": "broker-001",
+            "status": "partially_filled",
+            "filled_quantity": 4.0,
+            "avg_fill_price": 149.5,
+        }
+
+        engine.poll_status(buy_order.client_order_id)
+
+        assert buy_order.status == OrderState.PARTIALLY_FILLED
+        events = engine.audit_ledger.get_events(action=AuditAction.ORDER_FILLED)
+        assert len(events) == 1
+        assert events[0].details["partial"] is True
+
+    def test_poll_status_is_idempotent(self, engine, mock_broker, buy_order):
+        engine.submit(buy_order)
+
+        engine.poll_status(buy_order.client_order_id)
+        engine.poll_status(buy_order.client_order_id)
+
+        assert buy_order.status == OrderState.FILLED
+        # The fill audit event is recorded once, not on every re-poll.
+        events = engine.audit_ledger.get_events(action=AuditAction.ORDER_FILLED)
+        assert len(events) == 1
+
+    def test_poll_status_unknown_order_raises(self, engine):
+        with pytest.raises(ExecutionError, match="unknown client_order_id"):
+            engine.poll_status("does-not-exist")
+
+
+class TestExecutionEngineAuditEvents:
+
+    def test_kill_switch_block_records_audit_event(self, engine, buy_order, kill_switch):
+        kill_switch.activate(KillSwitchReason.OPERATOR, detail="manual halt")
+
+        with pytest.raises(KillSwitchError):
+            engine.submit(buy_order)
+
+        events = engine.audit_ledger.get_events(action=AuditAction.KILL_SWITCH_TRIGGERED)
+        assert len(events) == 1
+        assert events[0].order_id == buy_order.client_order_id
+        assert events[0].symbol == "AAPL"
+        assert "OPERATOR" in events[0].details["reason"]
+
+    def test_missing_price_in_risk_context_rejects_order(self, engine, order_manager):
+        engine.set_risk_context(
+            positions={},
+            prices={"MSFT": 100.0},  # No AAPL price
+            equity=100_000.0,
+        )
+        order = order_manager.create(symbol="AAPL", side=OrderSide.BUY, quantity=5)
+
+        with pytest.raises(ExecutionError, match="fail-closed"):
+            engine.submit(order)
+
+        assert order.status == OrderState.REJECTED
+        events = engine.audit_ledger.get_events(action=AuditAction.ORDER_REJECTED)
+        assert len(events) == 1
+        assert events[0].details["fail_closed"] is True
+
+    def test_no_risk_context_at_all_rejects_order(self, engine, order_manager):
+        # Explicitly wipe the context set by the fixture — an empty prices
+        # dict must also fail closed, not silently value the order at 0.0.
+        engine.set_risk_context(positions={}, prices={}, equity=100_000.0)
+        order = order_manager.create(symbol="AAPL", side=OrderSide.BUY, quantity=5)
+
+        with pytest.raises(ExecutionError, match="fail-closed"):
+            engine.submit(order)
+
+        assert order.status == OrderState.REJECTED
+
+    def test_limit_order_price_stands_in_for_missing_quote(
+        self, engine, order_manager, mock_broker
+    ):
+        engine.set_risk_context(positions={}, prices={}, equity=100_000.0)
+        order = order_manager.create(
+            symbol="AAPL",
+            side=OrderSide.BUY,
+            quantity=5,
+            order_type=OrderType.LIMIT,
+            limit_price=150.0,
+        )
+
+        response = engine.submit(order)
+
+        assert response["order_id"] == "broker-001"
+        assert order.status == OrderState.SUBMITTED
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -334,3 +600,57 @@ class TestOrderReconciler:
         reconciler = OrderReconciler(order_manager, mock_broker, "TEST")
         with pytest.raises(ReconciliationError):
             reconciler.reconcile_order(order.client_order_id)
+
+    def test_reconcile_filled_records_order_filled_audit(
+        self, order_manager, mock_broker, audit_ledger, unknown_order
+    ):
+        mock_broker.get_order_status.return_value = {
+            "order_id": "broker-rec-001",
+            "status": "filled",
+            "filled_quantity": 5.0,
+            "avg_fill_price": 175.0,
+        }
+        reconciler = OrderReconciler(
+            order_manager, mock_broker, "TEST", audit_ledger=audit_ledger
+        )
+
+        reconciler.reconcile_order(unknown_order.client_order_id)
+
+        events = audit_ledger.get_events(action=AuditAction.ORDER_FILLED)
+        assert len(events) == 1
+        assert events[0].order_id == unknown_order.client_order_id
+        assert events[0].details["source"] == "reconciliation"
+        assert events[0].details["filled_quantity"] == 5.0
+
+    def test_reconcile_cancelled_records_no_fill_audit(
+        self, order_manager, mock_broker, audit_ledger, unknown_order
+    ):
+        mock_broker.get_order_status.return_value = {
+            "order_id": "broker-rec-001",
+            "status": "canceled",
+            "filled_quantity": 0.0,
+            "avg_fill_price": 0.0,
+        }
+        reconciler = OrderReconciler(
+            order_manager, mock_broker, "TEST", audit_ledger=audit_ledger
+        )
+
+        reconciler.reconcile_order(unknown_order.client_order_id)
+
+        assert unknown_order.status == OrderState.CANCELLED
+        assert audit_ledger.get_events(action=AuditAction.ORDER_FILLED) == []
+
+    def test_reconcile_unresolvable_status_leaves_unknown(
+        self, order_manager, mock_broker, unknown_order
+    ):
+        mock_broker.get_order_status.return_value = {
+            "order_id": "broker-rec-001",
+            "status": "accepted",  # ACKNOWLEDGED is not a resolvable state
+            "filled_quantity": 0.0,
+            "avg_fill_price": 0.0,
+        }
+        reconciler = OrderReconciler(order_manager, mock_broker, "TEST")
+
+        reconciler.reconcile_order(unknown_order.client_order_id)
+
+        assert unknown_order.status == OrderState.UNKNOWN

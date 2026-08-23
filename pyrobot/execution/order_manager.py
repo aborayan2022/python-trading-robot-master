@@ -17,14 +17,15 @@ Order lifecycle state machine::
                ├─► REJECTED
                └─► EXPIRED
 
+    SUBMITTED / ACKNOWLEDGED / PARTIALLY_FILLED ──► CANCEL_PENDING ──► CANCELLED
+
     Any state may transition to UNKNOWN if the broker response is ambiguous.
-    UNKNOWN orders require explicit reconciliation before being resolved.
+    UNKNOWN orders require explicit reconciliation (see ``resolve_unknown``)
+    before being resolved to a reconciled state.
 """
 
-import uuid
 import threading
-
-from datetime import datetime, timezone
+import uuid
 from typing import Dict, List, Optional
 
 from pyrobot.exceptions import (
@@ -32,10 +33,20 @@ from pyrobot.exceptions import (
     OrderStateError,
 )
 from pyrobot.logging_config import get_logger
-from pyrobot.models.order import Order, OrderState, OrderSide, OrderType, TimeInForce
+from pyrobot.models.order import Order, OrderSide, OrderState, OrderType, TimeInForce
 from pyrobot.models.signal import Signal, SignalAction
 
 logger = get_logger("order_manager")
+
+# States an UNKNOWN order may be reconciled into via resolve_unknown().
+_RECONCILABLE_STATES: frozenset = frozenset({
+    OrderState.SUBMITTED,
+    OrderState.PARTIALLY_FILLED,
+    OrderState.FILLED,
+    OrderState.CANCELLED,
+    OrderState.REJECTED,
+    OrderState.EXPIRED,
+})
 
 # Valid forward state transitions.  UNKNOWN is reachable from any state.
 _VALID_TRANSITIONS: Dict[OrderState, frozenset] = {
@@ -45,6 +56,7 @@ _VALID_TRANSITIONS: Dict[OrderState, frozenset] = {
     }),
     OrderState.SUBMITTED: frozenset({
         OrderState.ACKNOWLEDGED, OrderState.REJECTED, OrderState.CANCELLED,
+        OrderState.CANCEL_PENDING,
         OrderState.PARTIALLY_FILLED, OrderState.FILLED, OrderState.UNKNOWN,
     }),
     OrderState.ACKNOWLEDGED: frozenset({
@@ -64,7 +76,9 @@ _VALID_TRANSITIONS: Dict[OrderState, frozenset] = {
     OrderState.CANCELLED: frozenset({OrderState.UNKNOWN}),
     OrderState.REJECTED: frozenset({OrderState.UNKNOWN}),
     OrderState.EXPIRED: frozenset({OrderState.UNKNOWN}),
-    OrderState.UNKNOWN: frozenset(),  # Requires explicit reconciliation
+    # UNKNOWN is only resolvable via explicit reconciliation
+    # (OrderManager.resolve_unknown) — never by a regular forward transition.
+    OrderState.UNKNOWN: _RECONCILABLE_STATES,
 }
 
 # Map from SignalAction to OrderSide
@@ -309,6 +323,81 @@ class OrderManager:
             logger.error(
                 "Order UNKNOWN: coid=%s reason=%r — reconciliation required.",
                 client_order_id, reason,
+            )
+
+    def mark_cancel_pending(self, client_order_id: str) -> None:
+        """Transition order to CANCEL_PENDING (cancel requested at broker).
+
+        Args:
+            client_order_id: Our internal idempotency key.
+
+        Raises:
+            KeyError: If client_order_id is unknown.
+            OrderStateError: If the transition is not valid.
+        """
+        with self._lock:
+            order = self._get(client_order_id)
+            self._transition(order, OrderState.CANCEL_PENDING)
+            logger.info(
+                "Order CANCEL_PENDING: coid=%s broker_id=%s",
+                client_order_id,
+                order.broker_order_id,
+            )
+
+    def resolve_unknown(
+        self,
+        client_order_id: str,
+        new_state: OrderState,
+        filled_qty: float = 0.0,
+        avg_price: float = 0.0,
+    ) -> None:
+        """Resolve an order in UNKNOWN state to its reconciled true state.
+
+        This is the ONLY sanctioned way out of UNKNOWN: the transition is
+        validated against the reconcilable-state map and applied under the
+        manager's lock, so the state machine is never bypassed.
+
+        Args:
+            client_order_id: Our internal idempotency key.
+            new_state: The reconciled state.  Must be one of SUBMITTED,
+                PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED, EXPIRED.
+            filled_qty: Filled quantity (applied for fill states).
+            avg_price: Average fill price (applied for fill states).
+
+        Raises:
+            KeyError: If client_order_id is unknown.
+            OrderStateError: If the order is not in UNKNOWN state, or
+                ``new_state`` is not a reconcilable state.
+        """
+        with self._lock:
+            order = self._get(client_order_id)
+
+            if order.status != OrderState.UNKNOWN:
+                raise OrderStateError(
+                    f"resolve_unknown requires current state UNKNOWN for order "
+                    f"{client_order_id!r}, got {order.status.value}."
+                )
+
+            if new_state not in _RECONCILABLE_STATES:
+                raise OrderStateError(
+                    f"Cannot resolve UNKNOWN order {client_order_id!r} to "
+                    f"{new_state.value}. Allowed: "
+                    f"{[s.value for s in _RECONCILABLE_STATES]}"
+                )
+
+            self._transition(order, new_state)
+
+            if new_state in (OrderState.PARTIALLY_FILLED, OrderState.FILLED):
+                order.filled_quantity = filled_qty
+                order.avg_fill_price = avg_price
+
+            logger.info(
+                "Order reconciled from UNKNOWN: coid=%s → %s "
+                "(filled=%.4f avg_price=%.4f)",
+                client_order_id,
+                new_state.value,
+                filled_qty,
+                avg_price,
             )
 
     # ── Lookups ───────────────────────────────────────────────────────────────

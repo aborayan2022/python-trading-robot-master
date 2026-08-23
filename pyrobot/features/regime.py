@@ -1,7 +1,8 @@
 """Market Regime Detection and Classification."""
 
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+
 import numpy as np
 import pandas as pd
 
@@ -71,7 +72,7 @@ class MarketRegimeDetector(BaseFeatureExtractor):
         # 2. Volatility and Volatility Percentile
         log_ret = np.log(close / close.shift(1))
         vol = log_ret.rolling(20, min_periods=20).std()
-        
+
         # Calculate percentile of current volatility over vol_lookback window
         def calc_pct(s: pd.Series) -> float:
             if s.empty or np.isnan(s.iloc[-1]):
@@ -120,7 +121,7 @@ class MarketRegimeDetector(BaseFeatureExtractor):
         """Evaluate latest market data and return current regime state."""
         extracted = self.extract(df)
         last_row = extracted.iloc[-1]
-        
+
         code = last_row.get("regime_code", 3)
         conf = last_row.get("regime_confidence", 0.5)
         trend = last_row.get("trend_strength", 0.0)

@@ -1,25 +1,24 @@
 """Tests for pyrobot.utils.retry — retry policy and exception classification."""
 
-import pytest
-import time
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
+import pytest
+
+from pyrobot.exceptions import (
+    AuthenticationError,
+    BrokerConnectionError,
+    BrokerRateLimitError,
+    BrokerTimeoutError,
+    DuplicateOrderError,
+    InvalidSymbolError,
+    KillSwitchError,
+    OrderRejectedError,
+)
 from pyrobot.utils.retry import (
     is_retryable_exception,
     is_retryable_order_error,
     retry,
 )
-from pyrobot.exceptions import (
-    BrokerRateLimitError,
-    BrokerTimeoutError,
-    BrokerConnectionError,
-    OrderRejectedError,
-    InvalidSymbolError,
-    AuthenticationError,
-    KillSwitchError,
-    DuplicateOrderError,
-)
-
 
 # ── is_retryable_exception ────────────────────────────────────────────────────
 

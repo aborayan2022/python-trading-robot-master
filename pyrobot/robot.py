@@ -1,24 +1,17 @@
 import json
-import time as time_true
 import pathlib
+import time as time_true
 import warnings
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List
 
 import pandas as pd
 
-from datetime import datetime
-from datetime import timezone
-from datetime import timedelta
-
-from typing import List
-from typing import Dict
-from typing import Union
-from typing import Optional
-
-from pyrobot.trades import Trade
-from pyrobot.portfolio import Portfolio
-from pyrobot.stock_frame import StockFrame
 from pyrobot.brokers.base import BrokerInterface
 from pyrobot.logging_config import get_logger
+from pyrobot.portfolio import Portfolio
+from pyrobot.stock_frame import StockFrame
+from pyrobot.trades import Trade
 
 logger = get_logger("robot")
 
@@ -275,7 +268,13 @@ class PyRobot():
     def execute_signals(
         self, signals: List[pd.Series], trades_to_execute: dict
     ) -> List[dict]:
-        """Executes the specified trades for each signal."""
+        """Executes the specified trades for each signal.
+
+        All orders — including paper trades — are routed through
+        ``self.broker.place_order`` so the broker stays the single
+        source of truth for execution and order ids (the PaperBroker
+        simulates the fills locally).
+        """
         buys: pd.Series = signals.get("buys", pd.Series())
         sells: pd.Series = signals.get("sells", pd.Series())
 
@@ -292,19 +291,7 @@ class PyRobot():
                     trades_to_execute[symbol]["has_executed"] = True
                     trade_obj: Trade = trades_to_execute[symbol]["buy"]["trade_func"]
 
-                    if not self.paper_trading:
-                        order_response = self.execute_orders(trade_obj=trade_obj)
-                        order_response = {
-                            "order_id": order_response["order_id"],
-                            "request_body": order_response["request_body"],
-                            "timestamp": datetime.now().isoformat(),
-                        }
-                    else:
-                        order_response = {
-                            "order_id": trade_obj._generate_order_id(),
-                            "request_body": trade_obj.order,
-                            "timestamp": datetime.now().isoformat(),
-                        }
+                    order_response = self._submit_trade(trade_obj=trade_obj)
                     order_responses.append(order_response)
 
         if not sells.empty:
@@ -318,23 +305,21 @@ class PyRobot():
                         )
                     trade_obj: Trade = trades_to_execute[symbol]["sell"]["trade_func"]
 
-                    if not self.paper_trading:
-                        order_response = self.execute_orders(trade_obj=trade_obj)
-                        order_response = {
-                            "order_id": order_response["order_id"],
-                            "request_body": order_response["request_body"],
-                            "timestamp": datetime.now().isoformat(),
-                        }
-                    else:
-                        order_response = {
-                            "order_id": trade_obj._generate_order_id(),
-                            "request_body": trade_obj.order,
-                            "timestamp": datetime.now().isoformat(),
-                        }
+                    order_response = self._submit_trade(trade_obj=trade_obj)
                     order_responses.append(order_response)
 
         self.save_orders(order_response_dict=order_responses)
         return order_responses
+
+    def _submit_trade(self, trade_obj: Trade) -> dict:
+        """Submit a Trade Object via the broker and build the response record."""
+        order_response = self.execute_orders(trade_obj=trade_obj)
+        return {
+            "order_id": order_response["order_id"],
+            "status": order_response.get("status", "QUEUED"),
+            "request_body": order_response["request_body"],
+            "timestamp": datetime.now().isoformat(),
+        }
 
     def execute_orders(self, trade_obj: Trade) -> dict:
         """Executes a Trade Object via the broker."""

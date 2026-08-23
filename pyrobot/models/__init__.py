@@ -1,6 +1,6 @@
 """Canonical domain models for the trading platform."""
 
-from pyrobot.models.order import Order, OrderState, OrderSide, OrderType, TimeInForce
+from pyrobot.models.order import Order, OrderSide, OrderState, OrderType, TimeInForce
 from pyrobot.models.position import Position, PositionSide
 from pyrobot.models.signal import Signal, SignalAction
 

@@ -1,13 +1,10 @@
 """Tests for the Indicators class."""
 
-import operator
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from pyrobot.indicators import Indicators
-from pyrobot.stock_frame import StockFrame
 
 
 class TestBollingerBands:

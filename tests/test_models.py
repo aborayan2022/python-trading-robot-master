@@ -1,11 +1,19 @@
 """Tests for canonical domain models."""
 
+from datetime import timezone
+
 import pytest
 
-from datetime import datetime, timezone
-from pyrobot.models import Order, OrderState, OrderSide, OrderType, TimeInForce
-from pyrobot.models import Position, PositionSide
-from pyrobot.models import Signal, SignalAction
+from pyrobot.models import (
+    Order,
+    OrderSide,
+    OrderState,
+    OrderType,
+    Position,
+    PositionSide,
+    Signal,
+    SignalAction,
+)
 
 
 class TestOrderState:

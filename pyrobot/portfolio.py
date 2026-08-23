@@ -1,11 +1,7 @@
+from typing import Any, List, Optional, Tuple
+
 import numpy as np
-
 from pandas import DataFrame
-from typing import Tuple
-from typing import List
-from typing import Optional
-from typing import Any
-
 
 from pyrobot.stock_frame import StockFrame
 
@@ -132,16 +128,16 @@ class Portfolio():
         Usage:
         ----
             >>> portfolio = Portfolio()
-            >>> new_position = Portfolio.add_position(symbol='MSFT', 
-                    asset_type='equity', 
-                    quantity=2, 
+            >>> new_position = Portfolio.add_position(symbol='MSFT',
+                    asset_type='equity',
+                    quantity=2,
                     purchase_price=4.00,
                     purchase_date="2020-01-31"
                 )
             >>> new_position
             {
-                'asset_type': 'equity', 
-                'quantity': 2, 
+                'asset_type': 'equity',
+                'quantity': 2,
                 'purchase_price': 4.00,
                 'symbol': 'MSFT',
                 'purchase_date': '2020-01-31'
@@ -171,7 +167,7 @@ class Portfolio():
 
         Returns:
         ----
-        {Tuple[bool, str]} -- Returns `True` if successfully deleted, `False` otherwise 
+        {Tuple[bool, str]} -- Returns `True` if successfully deleted, `False` otherwise
             along with a message.
 
         Usage:
@@ -179,9 +175,9 @@ class Portfolio():
             >>> portfolio = Portfolio()
 
             >>> new_position = Portfolio.add_position(
-                    symbol='MSFT', 
-                    asset_type='equity', 
-                    quantity=2, 
+                    symbol='MSFT',
+                    asset_type='equity',
+                    quantity=2,
                     purchase_price=4.00,
                     purchase_date="2020-01-31"
                 )
@@ -375,7 +371,7 @@ class Portfolio():
         ----
             >>> portfolio = Portfolio()
             >>> new_position = Portfolio.add_position(
-                symbol='MSFT', 
+                symbol='MSFT',
                 asset_type='equity'
             )
             >>> in_position_flag = Portfolio.in_portfolio(symbol='MSFT')
@@ -449,7 +445,7 @@ class Portfolio():
         ----
             >>> portfolio = Portfolio()
             >>> new_position = Portfolio.add_position(
-                symbol='MSFT', 
+                symbol='MSFT',
                 asset_type='equity',
                 purchase_price=4.00,
                 purchase_date="2020-01-31"
@@ -490,12 +486,12 @@ class Portfolio():
         ----
             >>> portfolio = Portfolio()
             >>> new_position = portfolio.add_position(
-                symbol='MSFT', 
+                symbol='MSFT',
                 asset_type='equity',
                 purchase_price=4.00,
                 purchase_date="2020-01-31"
             )
-            >>> portfolio_summary = portfolio.projected_market_value(current_prices={'MSFT':{'lastPrice': 8.00, 'openPrice': 7.50}})        
+            >>> portfolio_summary = portfolio.projected_market_value(current_prices={'MSFT':{'lastPrice': 8.00, 'openPrice': 7.50}})
         """
 
         projected_value = {}

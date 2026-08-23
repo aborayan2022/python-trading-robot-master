@@ -1,8 +1,9 @@
 """Tests for the backtesting engine."""
 
-import pytest
-import numpy as np
 from datetime import datetime, timedelta, timezone
+
+import numpy as np
+import pytest
 
 from pyrobot.backtesting.engine import BacktestEngine, BacktestResult
 
@@ -260,7 +261,7 @@ class TestBacktestEngine:
         def noop(stock_frame, indicator_client):
             return None
 
-        result = engine.run(strategy=noop, indicator_setup=my_setup)
+        engine.run(strategy=noop, indicator_setup=my_setup)
         assert setup_called["n"] == 1
 
     def test_take_profit(self):
@@ -283,3 +284,229 @@ class TestBacktestEngine:
             take_profit_pct=0.01,
         )
         assert isinstance(result, BacktestResult)
+
+
+class TestBacktestHonesty:
+    """Behavioral tests enforcing the engine's honesty contract."""
+
+    @staticmethod
+    def _make_cost_free_engine(data, **kwargs):
+        """Engine whose cost model charges nothing and fills exactly at price."""
+        from pyrobot.backtesting.cost_model import CostModelConfig, ExecutionCostModel
+
+        cfg = CostModelConfig(
+            half_spread_bps=0.0,
+            base_slippage_bps=0.0,
+            commission_per_share=0.0,
+            min_commission=0.0,
+            sec_fee_rate=0.0,
+            market_impact_coefficient=0.0,
+        )
+        return BacktestEngine(
+            historical_data=data,
+            cost_model=ExecutionCostModel(config=cfg),
+            **kwargs,
+        )
+
+    @staticmethod
+    def _bars(rows, symbol="MSFT"):
+        """rows: (open, high, low, close) tuples one minute apart, volume 1M."""
+        start = datetime(2024, 1, 2, 9, 30, tzinfo=timezone.utc)
+        data = []
+        for i, row in enumerate(rows):
+            data.append({
+                "symbol": symbol,
+                "open": round(row[0], 2),
+                "high": round(row[1], 2),
+                "low": round(row[2], 2),
+                "close": round(row[3], 2),
+                "volume": 1000000,
+                "datetime": int((start + timedelta(minutes=i)).timestamp() * 1000),
+            })
+        return data
+
+    def test_next_bar_execution(self):
+        """Signal on bar t fills at bar t+1 OPEN, never the signal bar close."""
+        rows = [
+            (100.0, 101.0, 99.0, 100.0),
+            (100.0, 101.0, 99.0, 105.0),   # bar1: BUY signal (close 105)
+            (110.0, 111.0, 109.0, 112.0),  # bar2: entry must be at open 110
+            (112.0, 113.0, 111.0, 114.0),  # bar3: sell signal
+            (113.0, 114.0, 112.0, 113.0),  # bar4: exit at open 113
+            (113.0, 114.0, 112.0, 113.0),
+        ]
+        engine = self._make_cost_free_engine(self._bars(rows))
+        calls = {"n": 0}
+
+        def strategy(stock_frame, indicator_client):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                return "buy"
+            if calls["n"] == 4:
+                return "sell"
+            return None
+
+        result = engine.run(strategy=strategy)
+        assert len(result.trades) == 1
+        assert result.trades[0]["entry_price"] == pytest.approx(110.0)
+        assert result.trades[0]["exit_price"] == pytest.approx(113.0)
+
+    def test_no_fill_on_final_bar_signal(self):
+        """A buy signal on the last bar never fills (no next bar exists)."""
+        rows = [(100.0, 101.0, 99.0, 100.0)] * 6
+        rows[-1] = (100.0, 200.0, 99.0, 200.0)
+        engine = self._make_cost_free_engine(self._bars(rows))
+        seen = []
+
+        def buy_on_last(stock_frame, indicator_client):
+            seen.append(len(stock_frame.frame))
+            return "buy" if len(seen) == len(rows) else None
+
+        result = engine.run(strategy=buy_on_last)
+        assert result.total_trades == 0
+
+    def test_strategy_sees_only_past_rows(self):
+        """Lookahead guard: at call k the frame has exactly the rows up to bar k."""
+        rows = [(100.0 + i, 101.0 + i, 99.0 + i, 100.0 + i) for i in range(10)]
+        engine = self._make_cost_free_engine(self._bars(rows))
+        seen_lengths = []
+
+        def recorder(stock_frame, indicator_client):
+            seen_lengths.append(len(stock_frame.frame))
+            return None
+
+        engine.run(strategy=recorder)
+        assert seen_lengths == [i + 1 for i in range(10)]
+
+    def test_stop_loss_intrabar_no_gap(self):
+        """Stop fills at the stop price when the bar low pierces it."""
+        rows = [
+            (100.0, 101.0, 99.0, 100.0),
+            (100.0, 101.0, 99.0, 100.0),   # BUY signal
+            (100.0, 101.0, 99.5, 100.5),   # entry at open 100
+            (99.0, 99.5, 94.0, 95.0),      # low 94 pierces stop 95
+            (95.0, 96.0, 94.0, 95.0),
+        ]
+        engine = self._make_cost_free_engine(self._bars(rows))
+        calls = {"n": 0}
+
+        def strategy(stock_frame, indicator_client):
+            calls["n"] += 1
+            return "buy" if calls["n"] == 2 else None
+
+        result = engine.run(strategy=strategy, stop_loss_pct=0.05)
+        assert len(result.trades) == 1
+        trade = result.trades[0]
+        assert trade["exit_reason"] == "stop_loss"
+        assert trade["exit_price"] == pytest.approx(95.0)
+
+    def test_stop_loss_gap_through_open(self):
+        """When the bar gaps through the stop, exit at the (worse) open."""
+        rows = [
+            (100.0, 101.0, 99.0, 100.0),
+            (100.0, 101.0, 99.0, 100.0),   # BUY signal
+            (100.0, 101.0, 99.5, 100.5),   # entry at open 100
+            (90.0, 91.0, 89.0, 90.0),      # opens at 90, below stop 95
+            (90.0, 91.0, 89.0, 90.0),
+        ]
+        engine = self._make_cost_free_engine(self._bars(rows))
+        calls = {"n": 0}
+
+        def strategy(stock_frame, indicator_client):
+            calls["n"] += 1
+            return "buy" if calls["n"] == 2 else None
+
+        result = engine.run(strategy=strategy, stop_loss_pct=0.05)
+        trade = result.trades[0]
+        assert trade["exit_reason"] == "stop_loss"
+        assert trade["exit_price"] == pytest.approx(90.0)
+
+    def test_commission_reduces_equity(self):
+        data = _make_price_data(n=30)
+        endings = []
+        for commission in (0.0, 25.0):
+            engine = BacktestEngine(
+                initial_balance=100000.0,
+                historical_data=data,
+                commission_per_trade=commission,
+            )
+            step = {"n": 0}
+
+            def buy_then_sell(stock_frame, indicator_client):
+                step["n"] += 1
+                if step["n"] == 3:
+                    return "buy"
+                if step["n"] == 15:
+                    return "sell"
+                return None
+
+            endings.append(engine.run(strategy=buy_then_sell).ending_balance)
+        assert endings[1] < endings[0]
+
+    def test_position_size_fraction(self):
+        rows = [(100.0, 101.0, 99.0, 100.0)] * 6
+        engine = self._make_cost_free_engine(self._bars(rows), position_size_fraction=0.5)
+        calls = {"n": 0}
+
+        def strategy(stock_frame, indicator_client):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return "buy"
+            if calls["n"] == 4:
+                return "sell"
+            return None
+
+        result = engine.run(strategy=strategy)
+        assert result.total_trades == 1
+        assert result.trades[0]["quantity"] == pytest.approx(500)
+
+    def test_partial_fill_with_tiny_volume(self):
+        """Volume participation caps fills; remainder re-attempts on later bars."""
+        rows = [(100.0, 101.0, 99.0, 100.0)] * 10
+        data = self._bars(rows)
+        for bar in data:
+            bar["volume"] = 100  # max fillable = max(1, 100*0.10) = 10 shares/bar
+        engine = self._make_cost_free_engine(data)
+        calls = {"n": 0}
+
+        def strategy(stock_frame, indicator_client):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return "buy"
+            if calls["n"] == 8:
+                return "sell"
+            return None
+
+        result = engine.run(strategy=strategy)
+        assert result.total_trades == 1
+        assert result.trades[0]["quantity"] == pytest.approx(70)
+        assert result.trades[0]["quantity"] < 950
+
+    def test_annualization_matches_bar_type(self):
+        """Engine derives periods_per_year from bar_type; metrics scale Sharpe by it."""
+        from pyrobot.backtesting.metrics import calculate_quantitative_metrics
+
+        rows = [(100.0, 101.0, 99.0, 100.0)] * 6
+        engine = self._make_cost_free_engine(self._bars(rows))
+        calls = {"n": 0}
+
+        def buy_once(stock_frame, indicator_client):
+            calls["n"] += 1
+            return "buy" if calls["n"] == 1 else None
+
+        minute = engine.run(strategy=buy_once, bar_type="minute")
+        assert minute.periods_per_year == 252 * 390
+        daily_again = engine.run(strategy=buy_once, bar_type="day")
+        assert daily_again.periods_per_year == 252
+
+        # Exact scaling check at the metrics level (rf=0 removes per-period
+        # risk-free drift so the ratio is purely sqrt(periods_per_year)).
+        returns = [0.01, -0.005, 0.008, 0.012, -0.003, 0.006]
+        equity = list(100000.0 * np.cumprod([1.0 + r for r in returns]))
+        daily = calculate_quantitative_metrics(
+            returns, equity, [], risk_free_rate=0.0, periods_per_year=252
+        )
+        minute_m = calculate_quantitative_metrics(
+            returns, equity, [], risk_free_rate=0.0, periods_per_year=252 * 390
+        )
+        assert minute_m.sharpe_ratio / daily.sharpe_ratio == pytest.approx(390 ** 0.5)
