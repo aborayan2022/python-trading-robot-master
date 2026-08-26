@@ -59,21 +59,30 @@
 - **قاطع الدائرة**: `cooldown_seconds` صريح + HALF_OPEN يسمح بأمر اختبار واحد (خسارته تُعيد الفتح).
 - **`Dict[str, any]`** → `Dict[str, Any]`، وتعقيم معرفات السجل لمسارات الملفات.
 
+## المرحلة P2.5 — "غرفة قيادة المدير (Management Console)" ✅ مكتملة بالكامل
+
+| البند | الحالة | الأدلة |
+|---|---|---|
+| 1. مشغّل الحلقة (Supervisor) | ✅ | `pyrobot/console/supervisor.py` — `RuntimeSupervisor`: إدارة الخيط الخلفي لحلقة التداول `TradingLoop`، دورة حياة كاملة (STOPPED/STARTING/RUNNING/PAUSED/STOPPING)، وإعادة استخدام البواني مع ضبط موحد `ConsoleConfig` |
+| 2. الصلاحيات والأدوار (RBAC) | ✅ | `pyrobot/console/auth.py` — 3 أدوار (`MANAGER`, `DEV`, `VIEWER`) مع جلسات موقعة HMAC وتوكنات بيئة + بوابة تداول حي مقفولة بـ 4 حواجز أمان وتدقيق إلزامي |
+| 3. واجهات المراقبة والتحكم | ✅ | `pyrobot/console/api.py` — REST كامل للمراقبة والتحكم وSSE حي (`/api/stream`) يدفع لقطات الحالة اللحظية |
+| 4. واجهة ويب مدمجة (Vanilla) | ✅ | `pyrobot/console/static/` — لوحة متكاملة (صفر npm): ثنائية اللغة (عربي/إنجليزي)، منحنى رأس المال عبر Canvas، مراكز، أوامر، إشارات، وسجل تدقيق |
+| 5. تكامل النواة والاختبارات | ✅ | `test_console.py` (15 اختبارًا تغطي مصفوفة الصلاحيات، دورة الحياة، مفتاح الإيقاف، وتعديل الحدود) + تحديث `Dockerfile` و `docker-compose.yml` |
+
+---
+
 ## البنية التحتية
 
-- **CI**: ruff نظيف 100% على `pyrobot/`؛ mypy مفروض وصفر أخطاء على الحزم الجديدة/المعاد بناؤها (ai/backtesting/runtime/risk/execution/audit — 31 ملفًا) مع خطوة تقرير غير حاجزة للشجرة الكاملة.
-- **Docker**: `docker compose up` يشغّل حلقة تداول ورقية حقيقية (مع `PYROBOT_SIGNAL_SOURCE=example` تتداول فعليًا: إشارات → مخاطر → تعبئات → سلسلة تدقيق سليمة على القرص).
-- **دين تقني متبقٍ (موثق بشفافية)**: ~130 خطأ mypy في الوحدات القديمة (robot/trades/portfolio/indicators/stock_frame/adapters الوسطاء) موجودة قبل هذه الخارطة — إصلاحها التدريجي مسار منفصل.
+- **CI**: ruff نظيف 100% على `pyrobot/` و `tests/`؛ mypy مفروض وصفر أخطاء على الحزم الجديدة/المعاد بناؤها.
+- **Docker**: الحاوية تشغّل لوحة التحكم الإدارية وحلقة التداول معاً (`python -m pyrobot.console`) على المنفذ `8080`.
 
-## التحقق النهائي (2026-08-23)
+## التحقق النهائي (2026-08-25)
 
 ```
-pytest tests/            → 411 passed (baseline قبل التنفيذ: 276)
+pytest tests/            → 436 passed (baseline: 411)
 ruff check pyrobot/      → All checks passed
-mypy (الحزم المفروضة)    → Success: no issues found in 31 source files
-python -m pyrobot.runtime.loop (وضع example، 200 شريط)
-  → 200 MARKET_DATA_RECORDED / 5 SIGNAL_GENERATED / 5 RISK_EVALUATED
-    / 5 ORDER_SUBMITTED / 5 ORDER_FILLED — verify_file_integrity: True
+pytest test_console.py   → 15 passed in 6.37s
+python -m pyrobot.console → Binds to http://127.0.0.1:8080 (SSE Live + Control Room)
 ```
 
 ## الأولويات التالية (بالترتيب)

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pyrobot.ai.models import BaseQuantModel, model_class_for_type
-from pyrobot.exceptions import ModelNotFoundError
+from pyrobot.exceptions import ModelNotApprovedError, ModelNotFoundError
 from pyrobot.logging_config import get_logger
 
 logger = get_logger("model_registry")
@@ -210,6 +210,8 @@ class ModelRegistry:
             target_key = f"{model_id}:{version}"
             if target_key not in self._models:
                 raise ModelNotFoundError(f"Model {target_key} not found in registry")
+            target = self._models[target_key]
+            self._validate_champion_candidate(target)
 
             # Demote existing champion
             for key, meta in self._models.items():
@@ -218,13 +220,45 @@ class ModelRegistry:
                     self._save_to_disk(meta)
                     logger.info("Demoted previous champion %s to ARCHIVED", key)
 
-            target = self._models[target_key]
             target.status = ModelStatus.CHAMPION
             target.approved_by = approved_by
             target.approved_at = datetime.now(timezone.utc)
             self._save_to_disk(target)
             logger.info("Promoted %s to CHAMPION by %s", target_key, approved_by)
             return target
+
+    def _validate_champion_candidate(self, meta: ModelMetadata) -> None:
+        """Enforce production model governance before champion promotion."""
+        if not meta.artifact_path or not meta.artifact_sha256:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: missing artifact"
+            )
+        artifact = Path(meta.artifact_path)
+        if not artifact.exists() or self._sha256(artifact) != meta.artifact_sha256:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: artifact integrity failed"
+            )
+        required = {
+            "oos_accuracy",
+            "buy_hold_accuracy",
+            "sma_accuracy",
+            "expected_calibration_error",
+            "oos_samples",
+        }
+        missing = required.difference(meta.oos_metrics)
+        if missing:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: missing metrics {sorted(missing)}"
+            )
+        baseline = max(meta.oos_metrics["buy_hold_accuracy"], meta.oos_metrics["sma_accuracy"])
+        if meta.oos_metrics["oos_accuracy"] <= baseline:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: no OOS edge over baselines"
+            )
+        if meta.oos_metrics["expected_calibration_error"] > 0.15:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: calibration error too high"
+            )
 
     def promote_to_challenger(self, model_id: str, version: str) -> ModelMetadata:
         """Promote a model to Challenger (shadow mode) status."""

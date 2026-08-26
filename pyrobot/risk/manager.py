@@ -30,6 +30,7 @@ Usage::
     rm.update_equity(100_000.0)
 """
 
+import dataclasses
 import math
 import threading
 from datetime import datetime, timezone
@@ -484,6 +485,19 @@ class RiskManager:
     @property
     def limits(self) -> RiskLimits:
         return self._limits
+
+    def update_limits(self, new_limits: RiskLimits) -> None:
+        """Atomically apply new risk limits in place (validated first).
+
+        Used by the management console's risk-limits editor. Fields are
+        written onto the SAME RiskLimits instance every component already
+        references (position sizer, exposure/drawdown monitors, circuit
+        breaker), so the change takes effect for all subsequent evaluations.
+        """
+        new_limits.validate()
+        with self._lock:
+            for field in dataclasses.fields(new_limits):
+                setattr(self._limits, field.name, getattr(new_limits, field.name))
 
     @property
     def daily_realized_pnl(self) -> float:

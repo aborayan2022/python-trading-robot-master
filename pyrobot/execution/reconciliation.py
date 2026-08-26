@@ -16,7 +16,7 @@ Usage::
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pyrobot.audit.ledger import AuditAction, AuditLedger
 from pyrobot.brokers.base import BrokerInterface
@@ -24,6 +24,7 @@ from pyrobot.exceptions import BrokerError, ReconciliationError
 from pyrobot.execution.order_manager import OrderManager
 from pyrobot.logging_config import get_logger
 from pyrobot.models.order import Order, OrderState
+from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
 
 logger = get_logger("reconciler")
 
@@ -241,4 +242,96 @@ class OrderReconciler:
         if self._max_age <= 0:
             return False
         age = (datetime.now(timezone.utc) - order.timestamp).total_seconds()
-        return age > self._max_age
+        return bool(age > self._max_age)
+
+
+class AccountReconciler:
+    """Compare platform state with broker ground truth and halt on mismatches."""
+
+    def __init__(
+        self,
+        broker: BrokerInterface,
+        order_manager: OrderManager,
+        audit_ledger: AuditLedger,
+        kill_switch: KillSwitch,
+        account_id: str = "",
+        position_tolerance: float = 1e-6,
+        cash_tolerance: float = 1.0,
+    ) -> None:
+        self._broker = broker
+        self._order_manager = order_manager
+        self._audit_ledger = audit_ledger
+        self._kill_switch = kill_switch
+        self._account_id = account_id
+        self._position_tolerance = position_tolerance
+        self._cash_tolerance = cash_tolerance
+
+    def reconcile(
+        self,
+        expected_positions: Dict[str, float],
+        expected_cash: Optional[float] = None,
+    ) -> dict:
+        """Run broker/account reconciliation and activate kill switch on mismatch."""
+        broker_positions = {
+            p["symbol"]: float(p.get("quantity", 0.0) or 0.0)
+            for p in self._broker.get_positions(self._account_id)
+        }
+        open_orders = self._broker.get_open_orders(self._account_id)
+        mismatches = []
+        symbols = set(expected_positions).union(broker_positions)
+        for symbol in sorted(symbols):
+            expected = float(expected_positions.get(symbol, 0.0) or 0.0)
+            actual = float(broker_positions.get(symbol, 0.0) or 0.0)
+            if abs(expected - actual) > self._position_tolerance:
+                mismatches.append({
+                    "type": "position",
+                    "symbol": symbol,
+                    "expected": expected,
+                    "actual": actual,
+                })
+
+        account = self._broker.get_account_info(self._account_id)
+        if expected_cash is not None:
+            cash = float(account.get("cash_balance", 0.0) or 0.0)
+            if abs(float(expected_cash) - cash) > self._cash_tolerance:
+                mismatches.append({
+                    "type": "cash",
+                    "expected": float(expected_cash),
+                    "actual": cash,
+                })
+
+        tracked_broker_ids = {
+            o.broker_order_id for o in self._order_manager.active_orders() if o.broker_order_id
+        }
+        for open_order in open_orders:
+            broker_id = str(open_order.get("order_id", ""))
+            if broker_id and broker_id not in tracked_broker_ids:
+                mismatches.append({
+                    "type": "open_order",
+                    "broker_order_id": broker_id,
+                    "symbol": open_order.get("symbol"),
+                    "status": open_order.get("status"),
+                })
+
+        report = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "broker_positions": broker_positions,
+            "expected_positions": expected_positions,
+            "open_orders": open_orders,
+            "mismatches": mismatches,
+            "ok": not mismatches,
+        }
+        self._audit_ledger.record(
+            action=AuditAction.RECONCILIATION_RUN,
+            details=report,
+        )
+        if mismatches:
+            self._kill_switch.activate(
+                KillSwitchReason.POSITION_MISMATCH,
+                detail=f"Account reconciliation mismatches: {mismatches}",
+            )
+            self._audit_ledger.record(
+                action=AuditAction.KILL_SWITCH_TRIGGERED,
+                details={"reason": "POSITION_MISMATCH", "mismatches": mismatches},
+            )
+        return report

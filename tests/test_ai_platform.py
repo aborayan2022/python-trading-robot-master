@@ -26,20 +26,54 @@ from pyrobot.models.signal import SignalAction
 
 class TestModelRegistry:
     def test_champion_challenger_lifecycle(self) -> None:
+        rng = np.random.default_rng(55)
+        X = pd.DataFrame({
+            "rsi_14": rng.uniform(20, 80, 120),
+            "vol_ratio": rng.normal(0, 1, 120),
+            "momentum": rng.normal(0, 1, 120),
+        })
+        y = pd.Series(((X["rsi_14"] - 50) + X["vol_ratio"] + X["momentum"] > 0).astype(int))
+        governance_metrics = {
+            "oos_accuracy": 0.70,
+            "buy_hold_accuracy": 0.55,
+            "sma_accuracy": 0.56,
+            "expected_calibration_error": 0.05,
+            "oos_samples": 100,
+        }
         with tempfile.TemporaryDirectory() as tmp_dir:
             registry = ModelRegistry(registry_dir=tmp_dir)
 
-            m1 = ModelMetadata(
+            rejected = ModelMetadata(
                 model_id="xgb_direction",
-                version="v1.0",
-                model_type="GBDT_Classifier",
+                version="v0.1",
+                model_type=LogisticDirectionModel.model_type,
                 target_variable="return_5d_sign",
                 features=["rsi_14", "vol_ratio"],
                 training_start="2024-01-01",
                 training_end="2025-01-01",
                 status=ModelStatus.CANDIDATE,
             )
-            registry.register_model(m1)
+            registry.register_model(rejected)
+            from pyrobot.exceptions import ModelNotApprovedError
+
+            with pytest.raises(ModelNotApprovedError):
+                registry.promote_to_champion("xgb_direction", "v0.1", approved_by="RiskCommittee")
+
+            model_v1 = LogisticDirectionModel(model_id="xgb_direction", version="v1.0").fit(
+                X[["rsi_14", "vol_ratio"]], y
+            )
+            m1 = ModelMetadata(
+                model_id="xgb_direction",
+                version="v1.0",
+                model_type=LogisticDirectionModel.model_type,
+                target_variable="return_5d_sign",
+                features=["rsi_14", "vol_ratio"],
+                training_start="2024-01-01",
+                training_end="2025-01-01",
+                status=ModelStatus.CANDIDATE,
+                oos_metrics=governance_metrics,
+            )
+            registry.register_model(m1, model=model_v1)
 
             loaded = registry.get_model("xgb_direction", "v1.0")
             assert loaded.model_id == "xgb_direction"
@@ -49,16 +83,20 @@ class TestModelRegistry:
             assert champ.status == ModelStatus.CHAMPION
             assert registry.get_champion().version == "v1.0"
 
+            model_v2 = LogisticDirectionModel(model_id="xgb_direction", version="v2.0").fit(
+                X[["rsi_14", "vol_ratio", "momentum"]], y
+            )
             m2 = ModelMetadata(
                 model_id="xgb_direction",
                 version="v2.0",
-                model_type="GBDT_Classifier",
+                model_type=LogisticDirectionModel.model_type,
                 target_variable="return_5d_sign",
                 features=["rsi_14", "vol_ratio", "momentum"],
                 training_start="2024-01-01",
                 training_end="2025-06-01",
+                oos_metrics=governance_metrics,
             )
-            registry.register_model(m2)
+            registry.register_model(m2, model=model_v2)
             registry.promote_to_challenger("xgb_direction", "v2.0")
 
             challengers = registry.get_challengers()
@@ -334,6 +372,13 @@ class TestEnsembleSignalEngine:
                 model_type=LogisticDirectionModel.model_type,
                 target_variable="dir_1", features=list(X.columns),
                 training_start="2024-01-01", training_end="2025-01-01",
+                oos_metrics={
+                    "oos_accuracy": 0.80,
+                    "buy_hold_accuracy": 0.55,
+                    "sma_accuracy": 0.56,
+                    "expected_calibration_error": 0.05,
+                    "oos_samples": 120,
+                },
             )
             registry.register_model(meta, model=model)
             registry.promote_to_champion("champ", "v1.0", approved_by="tester")

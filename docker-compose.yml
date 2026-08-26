@@ -23,6 +23,8 @@ services:
       - PYROBOT_BALANCE=${PYROBOT_BALANCE:-100000}
       - PYROBOT_BAR_INTERVAL=${PYROBOT_BAR_INTERVAL:-1.0}
       - PYROBOT_AUDIT_PATH=/app/data/audit/ledger.jsonl
+    ports:
+      - "${PYROBOT_CONSOLE_PORT:-8080}:8080"
     volumes:
       - bot-data:/app/data
       - bot-logs:/app/logs

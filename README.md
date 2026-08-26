@@ -1,10 +1,22 @@
 # Python Trading Robot
 
+## Production Safety Notice
+
+The production path is Alpaca paper first. Use `PYROBOT_PROFILE=alpaca_paper`
+for real Alpaca paper trading. Live trading is locked by default:
+`PYROBOT_PROFILE=alpaca_live_locked` fails unless
+`PYROBOT_ALLOW_LIVE_TRADING=true` is set explicitly after the paper-trading
+acceptance gates are complete.
+
+See `docs/production_runbook.md` for profiles, stop conditions, and daily
+review procedures.
+
 ## Table of Contents
 
 - [Overview](#overview)
-- [What's New in v0.2.0](#whats-new-in-v020)
+- [Management Console — غرفة قيادة المدير](#management-console--غرفة-قيادة-المدير)
 - [Runtime Trading Loop](#runtime-trading-loop)
+- [What's New in v0.2.0](#whats-new-in-v020)
 - [Setup](#setup)
 - [Quickstart](#quickstart)
 - [Supported Brokers](#supported-brokers)
@@ -12,16 +24,22 @@
 - [Backtesting](#backtesting)
 - [Indicators](#indicators)
 
-## Overview
+## Management Console — غرفة قيادة المدير
 
-A trading robot written in Python that can run automated strategies using technical analysis. The robot supports multiple brokers through a unified abstraction layer.
+A single-process real-time web dashboard for telemetry, risk control, and lifecycle management:
 
-**Core objects:**
+```bash
+# Launch the Management Console and trading loop (binds to http://127.0.0.1:8080)
+python -m pyrobot.console
+```
 
-- **Portfolio** — Tracks positions, calculates risk metrics (variance, allocation, Sharpe), and projects market values in real-time.
-- **Trade** — Defines orders (market, limit, stop, bracket) with legs, stop losses, and take profits.
-- **StockFrame** — Real-time multi-index DataFrame storing historical and live OHLCV data.
-- **Indicators** — Calculates technical indicators (RSI, Bollinger Bands, Stochastic, CCI, KST, ADX, VWAP, Ichimoku Cloud, OBV, and more).
+- **Interactive UI**: Real-time SSE streaming, Canvas equity curve, live positions/orders, and streaming signals.
+- **Bilingual**: Instant toggle between Arabic (العربية) and English (LTR/RTL).
+- **Role-Based Access Control (RBAC)**:
+  - `manager` (`manager-token`): Full lifecycle, configuration, risk limits, kill switch, and live unlocking.
+  - `dev` (`dev-token`): Telemetry, metrics, and tamper-evident cryptographic audit ledger.
+  - `viewer` (`viewer-token`): Read-only overview and reporting.
+- **Live Trading Safety Gate**: Multi-step unlock requiring manager role, `PYROBOT_ALLOW_LIVE_TRADING=true`, exact confirmation phrase, and audit tracking.
 
 ## Runtime Trading Loop
 

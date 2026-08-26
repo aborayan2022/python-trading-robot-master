@@ -5,6 +5,12 @@ from pyrobot.data.feed import MarketDataFeed
 from pyrobot.data.quality import DataAnomaly, DataQualityEngine, DataQualityReport, DatasetMetadata
 from pyrobot.data.storage import DatasetStore, DatasetVersion
 
+try:
+    from pyrobot.data.alpaca import AlpacaDataProvider, is_us_equity_session
+except Exception:  # pragma: no cover - alpaca-py is optional
+    AlpacaDataProvider = None  # type: ignore[misc, assignment]
+    is_us_equity_session = None  # type: ignore[misc, assignment]
+
 __all__ = [
     "MarketDataProvider",
     "Candle",
@@ -17,4 +23,6 @@ __all__ = [
     "DatasetStore",
     "DatasetVersion",
     "MarketDataFeed",
+    "AlpacaDataProvider",
+    "is_us_equity_session",
 ]

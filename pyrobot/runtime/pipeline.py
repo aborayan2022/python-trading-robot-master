@@ -22,10 +22,11 @@ from pyrobot.brokers.base import BrokerInterface
 from pyrobot.exceptions import KillSwitchError
 from pyrobot.execution.engine import ExecutionEngine
 from pyrobot.execution.order_manager import OrderManager
+from pyrobot.execution.reconciliation import AccountReconciler
 from pyrobot.features.engine import FeatureEngine
 from pyrobot.logging_config import get_logger
 from pyrobot.models.signal import Signal, SignalAction
-from pyrobot.risk.kill_switch import KillSwitch
+from pyrobot.risk.kill_switch import KillSwitch, KillSwitchReason
 from pyrobot.risk.limits import RiskLimits
 from pyrobot.risk.manager import RiskManager
 from pyrobot.stock_frame import StockFrame
@@ -80,6 +81,7 @@ class TradingPipeline:
         dry_run: Forwarded to ExecutionEngine (shadow mode — no broker orders).
         history_window: Max bars retained per symbol for feature computation.
         drift_interval: Run a drift check every N processed bars.
+        reconciliation_interval: Run broker/account reconciliation every N bars.
     """
 
     def __init__(
@@ -99,6 +101,7 @@ class TradingPipeline:
         history_window: int = 300,
         drift_interval: int = 50,
         min_history_bars: int = 60,
+        reconciliation_interval: int = 25,
     ) -> None:
         self.broker = broker
         self.symbols = list(symbols)
@@ -124,6 +127,14 @@ class TradingPipeline:
         self.history_window = history_window
         self.drift_interval = drift_interval
         self.min_history_bars = min_history_bars
+        self.reconciliation_interval = reconciliation_interval
+        self.account_reconciler = AccountReconciler(
+            broker=broker,
+            order_manager=self.order_manager,
+            audit_ledger=self.audit_ledger,
+            kill_switch=self.kill_switch,
+            account_id=account_id,
+        )
 
         self._history: Dict[str, List[dict]] = {s: [] for s in self.symbols}
         self._baseline_features: Optional[pd.DataFrame] = None
@@ -131,6 +142,8 @@ class TradingPipeline:
         self._current_prices: Dict[str, float] = {}
         self._daily_key: Optional[str] = None
         self.kill_switch_triggered: bool = False
+        self._last_bar_at: Optional[datetime] = None
+        self._last_symbol_bar_at: Dict[str, datetime] = {}
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -146,6 +159,9 @@ class TradingPipeline:
         """
         ts = timestamp or datetime.now(timezone.utc)
         self._bars_processed += 1
+        self._last_bar_at = ts
+        for symbol in bars:
+            self._last_symbol_bar_at[symbol] = ts
 
         self._record_market_data(bars, ts)
         self._append_history(bars)
@@ -165,6 +181,8 @@ class TradingPipeline:
             and self._bars_processed % self.drift_interval == 0
         ):
             self._run_drift_check()
+        if self.reconciliation_interval > 0 and self._bars_processed % self.reconciliation_interval == 0:
+            self._run_account_reconciliation()
 
         signals = self._generate_signals(bars, prices, positions)
         outcomes = [self._execute_signal(sig, positions, prices, equity) for sig in signals]
@@ -404,6 +422,26 @@ class TradingPipeline:
             },
         )
 
+    def _run_account_reconciliation(self) -> None:
+        """Compare risk-book positions with broker positions and halt on mismatch."""
+        tracked = self.risk_manager.get_tracked_positions()
+        expected_positions = {
+            symbol: float(data.get("qty", 0.0) or 0.0)
+            for symbol, data in tracked.items()
+        }
+        try:
+            self.account_reconciler.reconcile(expected_positions=expected_positions)
+        except Exception as exc:
+            logger.error("Account reconciliation failed: %s", exc)
+            self.kill_switch.activate(
+                reason=KillSwitchReason.SYSTEM_HEALTH_FAILURE,
+                detail=f"reconciliation_error={exc}",
+            )
+            self.audit_ledger.record(
+                action=AuditAction.KILL_SWITCH_TRIGGERED,
+                details={"reason": "SYSTEM_HEALTH_FAILURE", "stage": "account_reconciliation", "error": str(exc)},
+            )
+
     # ── Account helpers ───────────────────────────────────────────────────────
 
     def _broker_positions(self) -> Dict[str, float]:
@@ -438,8 +476,21 @@ class TradingPipeline:
 
     def status(self) -> dict:
         """Operational snapshot of the pipeline."""
+        now = datetime.now(timezone.utc)
+        freshness: Dict[str, dict] = {}
+        for s in self.symbols:
+            sym_ts = self._last_symbol_bar_at.get(s)
+            if sym_ts:
+                aware_ts = sym_ts if sym_ts.tzinfo is not None else sym_ts.replace(tzinfo=timezone.utc)
+                age = max(0.0, (now - aware_ts).total_seconds())
+                freshness[s] = {"last_bar_at": sym_ts.isoformat(), "age_seconds": round(age, 2)}
+            else:
+                freshness[s] = {"last_bar_at": None, "age_seconds": None}
+
         return {
             "bars_processed": self._bars_processed,
+            "last_bar_at": self._last_bar_at.isoformat() if self._last_bar_at else None,
+            "data_freshness": freshness,
             "kill_switch_active": self.kill_switch.is_active,
             "kill_switch_triggered": self.kill_switch_triggered,
             "model_risk_scale": self.risk_manager.model_risk_scale,

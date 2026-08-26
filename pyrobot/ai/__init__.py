@@ -1,5 +1,6 @@
 """AI & Machine Learning quantitative intelligence package."""
 
+from pyrobot.ai.calibration import IsotonicCalibrator
 from pyrobot.ai.context import (
     LexiconSentimentEngine,
     LLMContextEngine,
@@ -22,6 +23,12 @@ from pyrobot.ai.registry import (
     ModelRegistry,
     ModelStatus,
 )
+from pyrobot.ai.training import (
+    TrainingGateConfig,
+    accuracy_metric,
+    build_training_frame,
+    train_direction_champion_candidate,
+)
 
 __all__ = [
     "ModelRegistry",
@@ -37,6 +44,11 @@ __all__ = [
     "DriftDetector",
     "DriftReport",
     "LabelBuilder",
+    "IsotonicCalibrator",
+    "TrainingGateConfig",
+    "accuracy_metric",
+    "build_training_frame",
+    "train_direction_champion_candidate",
     "LexiconSentimentEngine",
     "LLMContextEngine",
     "SentimentAnalysis",

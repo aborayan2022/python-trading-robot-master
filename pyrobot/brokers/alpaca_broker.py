@@ -164,6 +164,9 @@ class AlpacaBroker(BrokerInterface):
             from alpaca.trading.enums import OrderSide, TimeInForce
             from alpaca.trading.requests import MarketOrderRequest
 
+            if self._trading_client is None:
+                self.authenticate()
+
             side_map = {
                 "BUY": OrderSide.BUY,
                 "SELL": OrderSide.SELL,
@@ -210,15 +213,19 @@ class AlpacaBroker(BrokerInterface):
     def get_order_status(self, account: str, order_id: str) -> dict:
         """Get order status from Alpaca."""
         try:
+            if self._trading_client is None:
+                self.authenticate()
 
             order = self._trading_client.get_order_by_id(order_id)
 
             return {
                 "order_id": order_id,
                 "status": str(order.status.value),
+                "quantity": float(order.qty or 0),
                 "filled_quantity": float(order.filled_qty or 0),
                 "remaining_quantity": float(order.qty or 0)
                 - float(order.filled_qty or 0),
+                "avg_fill_price": float(order.filled_avg_price or 0),
             }
         except Exception as e:
             raise BrokerError(f"Failed to get order status from Alpaca: {e}") from e
@@ -230,9 +237,7 @@ class AlpacaBroker(BrokerInterface):
         """
         try:
             if self._trading_client is None:
-                raise BrokerError(
-                    "Alpaca trading client not initialized; authenticate() first"
-                )
+                self.authenticate()
             self._trading_client.cancel_order(order_id=order_id)
             logger.info(f"Cancelled Alpaca order {order_id}")
             return True
@@ -246,9 +251,7 @@ class AlpacaBroker(BrokerInterface):
             from alpaca.trading.requests import GetOrdersRequest
 
             if self._trading_client is None:
-                raise BrokerError(
-                    "Alpaca trading client not initialized; authenticate() first"
-                )
+                self.authenticate()
             request = GetOrdersRequest(status=QueryOrderStatus.OPEN)
             orders = self._trading_client.get_orders(request)
 
@@ -267,6 +270,8 @@ class AlpacaBroker(BrokerInterface):
     def get_account_info(self, account: str = None) -> dict:
         """Get account information from Alpaca."""
         try:
+            if self._trading_client is None:
+                self.authenticate()
             acc = self._trading_client.get_account()
 
             return {
@@ -282,6 +287,8 @@ class AlpacaBroker(BrokerInterface):
     def get_positions(self, account: str = None) -> List[dict]:
         """Get positions from Alpaca."""
         try:
+            if self._trading_client is None:
+                self.authenticate()
             positions = self._trading_client.get_all_positions()
 
             result = []

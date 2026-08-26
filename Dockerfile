@@ -9,9 +9,9 @@ RUN apt-get update && \
 
 COPY pyproject.toml ./
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir --prefix=/install ".[alpaca,schwab,dev]"
+    pip install --no-cache-dir --prefix=/install ".[alpaca,schwab,console,dev]"
 
-# ── Stage 2: Runtime (production) ──────────────────────────────────
+# ── Stage 2: Runtime / Console ────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
 RUN groupadd -r trader && useradd -r -g trader -d /app -s /sbin/nologin trader
@@ -27,16 +27,19 @@ RUN mkdir -p /app/data /app/logs /tmp && \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PYROBOT_CONSOLE_HOST=0.0.0.0 \
+    PYROBOT_CONSOLE_PORT=8080
+
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "from pyrobot.runtime import TradingLoop; print('ok')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
 
 USER trader
 
-# Paper-mode replay trading loop (see pyrobot/runtime/loop.py for env vars).
-# This actually trades: signals → risk gates → paper fills → audit ledger.
-CMD ["python", "-m", "pyrobot.runtime.loop"]
+# Launch the unified Management Console + background trading loop
+CMD ["python", "-m", "pyrobot.console"]
 
 # ── Stage 3: Test (includes tests) ────────────────────────────────
 FROM runtime AS test
