@@ -66,7 +66,7 @@ The audit trail lands in `data/audit/ledger.jsonl` as a verifiable SHA-256 hash 
 ## Setup
 
 ```bash
-# Core only (paper trading + backtesting)
+# Core only (paper trading + backtesting) — runs 421 tests, no console
 pip install -e .
 
 # With a specific broker
@@ -74,9 +74,19 @@ pip install -e ".[alpaca]"
 pip install -e ".[schwab]"
 pip install -e ".[ibkr]"
 
-# Development
+# With management console (full 436 tests)
+pip install -e ".[console]"
+
+# Development (all extras + linting + type checking)
 pip install -e ".[dev]"
 ```
+
+### Test Suite
+
+| Install command | What runs | Tests |
+|---|---|---|
+| `pip install -e .` | Core only (no fastapi) | 421 pass, 15 console tests skipped |
+| `pip install -e ".[console]"` or `pip install -e ".[dev]"` | Full suite | 436 pass |
 
 ## Quickstart
 

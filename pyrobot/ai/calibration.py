@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -89,3 +90,26 @@ class IsotonicCalibrator:
                 "empirical_rate": avg_label,
             })
         return {"expected_calibration_error": float(ece), "bins": rows}
+
+    def save(self, path: str | Path) -> None:
+        """Persist fitted calibrator to a .npz artifact (no pickle)."""
+        if not self.is_fitted:
+            raise RuntimeError("Calibrator must be fitted before save()")
+        np.savez(
+            path,
+            thresholds=self.thresholds_,
+            values=self.values_,
+            is_fitted=np.array([self.is_fitted]),
+        )
+
+    @classmethod
+    def load(cls, path: str | Path) -> "IsotonicCalibrator":
+        """Restore a fitted calibrator from a .npz artifact."""
+        with np.load(path, allow_pickle=False) as data:
+            cal = cls()
+            cal.thresholds_ = data["thresholds"].astype(np.float64)
+            cal.values_ = data["values"].astype(np.float64)
+            cal.is_fitted = bool(data["is_fitted"][0])
+        if not cal.is_fitted:
+            raise RuntimeError(f"Calibrator artifact at {path} is not fitted")
+        return cal

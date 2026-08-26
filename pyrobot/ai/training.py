@@ -12,12 +12,16 @@ import numpy as np
 import pandas as pd
 
 from pyrobot.ai.calibration import IsotonicCalibrator
+from pyrobot.ai.economic_gate import EconomicMetrics, evaluate_oos_economics
 from pyrobot.ai.labels import LabelBuilder
 from pyrobot.ai.models import BaseQuantModel, LogisticDirectionModel
 from pyrobot.ai.registry import ModelMetadata, ModelRegistry, ModelStatus
 from pyrobot.backtesting.walk_forward import run_walk_forward
 from pyrobot.data.base import DataFrequency, MarketDataProvider
 from pyrobot.features.engine import FeatureEngine
+from pyrobot.logging_config import get_logger
+
+logger = get_logger("training")
 
 
 @dataclass
@@ -27,6 +31,11 @@ class TrainingGateConfig:
     min_oos_accuracy_edge: float = 0.01
     min_oos_samples: int = 100
     max_calibration_error: float = 0.15
+    # WO-4: Economic gate defaults — deliberately permissive initially.
+    min_oos_net_pnl: float = 0.0
+    min_oos_trades: int = 20
+    min_ev_per_trade: float = 0.0
+    min_profit_factor: float = 1.0
 
 
 def accuracy_metric(y_true: pd.Series, y_pred: np.ndarray) -> float:
@@ -172,6 +181,10 @@ def train_direction_champion_candidate(
     threshold: float = 0.0,
     gate: Optional[TrainingGateConfig] = None,
     report_path: Optional[str | Path] = None,
+    n_splits: int = 3,
+    train_period_days: int = 20,
+    test_period_days: int = 5,
+    embargo_days: int = 1,
 ) -> dict:
     """Train, evaluate, gate, and register a direction model candidate."""
     gate = gate or TrainingGateConfig()
@@ -196,27 +209,123 @@ def train_direction_champion_candidate(
         train_fn=lambda model, x, y: model.fit(x, y),
         predict_fn=lambda model, x: model.predict(x),
         metric_fn=accuracy_metric,
-        n_splits=3,
-        train_period_days=20,
-        test_period_days=5,
-        embargo_days=1,
+        n_splits=n_splits,
+        train_period_days=train_period_days,
+        test_period_days=test_period_days,
+        embargo_days=embargo_days,
         expanding=True,
+        purge_bars=horizon,
+        proba_fn=lambda model, x: model.predict_proba(x),
     )
     bh = buy_and_hold_direction_baseline(labels)
     sma = sma_direction_baseline(aligned_prices.loc[labels.index], labels)
 
+    # Refit on all data for the registered artifact (standard practice).
     fitted = model_factory()
     fitted.fit(clean, labels)
-    proba = fitted.predict_proba(clean)[:, 1]
-    calibrator = IsotonicCalibrator().fit(proba, labels)
-    calibration = calibrator.report(proba, labels)
+
+    # WO-5: Shadow validation — evaluate the refitted artifact on a holdout
+    # excluded from the walk-forward, to detect overfitting or over-optimism.
+    holdout_size = max(test_period_days, int(len(clean) * 0.10))
+    holdout_size = min(holdout_size, len(clean) - 2 * test_period_days)
+    if holdout_size < 10:
+        holdout_size = 0
+
+    shadow_metrics: dict = {}
+    if holdout_size > 0:
+        holdout_data = clean.iloc[-holdout_size:]
+        holdout_labels_raw = labels.iloc[-holdout_size:]
+
+        # Accuracy on holdout
+        shadow_preds = fitted.predict(holdout_data)
+        shadow_accuracy = accuracy_metric(holdout_labels_raw, shadow_preds)
+
+        # ECE on holdout
+        shadow_proba = fitted.predict_proba(holdout_data)[:, 1]
+        shadow_calibrator = IsotonicCalibrator().fit(shadow_proba, holdout_labels_raw)
+        shadow_ece_report = shadow_calibrator.report(shadow_proba, holdout_labels_raw)
+        shadow_ece = shadow_ece_report["expected_calibration_error"]
+
+        # Economics on holdout
+        holdout_prices = aligned_prices.loc[holdout_data.index]
+        try:
+            shadow_econ = evaluate_oos_economics(
+                oos_probabilities=shadow_proba,
+                aligned_prices=holdout_prices,
+            )
+        except Exception as exc:
+            logger.warning("Shadow economic evaluation failed: %s", exc)
+            shadow_econ = EconomicMetrics()
+
+        shadow_metrics = {
+            "shadow_accuracy": float(shadow_accuracy),
+            "shadow_ece": float(shadow_ece),
+            "shadow_net_pnl": shadow_econ.net_pnl_after_costs,
+            "shadow_sharpe": shadow_econ.sharpe,
+            "shadow_n_trades": shadow_econ.n_trades,
+        }
+        logger.info(
+            "Shadow holdout: accuracy=%.4f, ECE=%.4f, net_pnl=%.2f",
+            shadow_accuracy, shadow_ece, shadow_econ.net_pnl_after_costs,
+        )
+
+    # WO-3: Fit calibrator on OOS probabilities, not in-sample.
+    # This ensures the max_calibration_error gate evaluates real generalization.
+    if len(result.oos_probabilities) > 0:
+        calibrator = IsotonicCalibrator().fit(result.oos_probabilities, result.oos_labels)
+        calibration_oos = calibrator.report(result.oos_probabilities, result.oos_labels)
+    else:
+        # Fallback: no OOS probabilities collected (proba_fn not provided or
+        # all folds empty).  Record NaN ECE so the gate rejects.
+        calibrator = None
+        calibration_oos = {"expected_calibration_error": float("nan"), "bins": []}
+
+    # Diagnostic: in-sample ECE (informational only, does NOT gate approval)
+    insample_proba = fitted.predict_proba(clean)[:, 1]
+    insample_calibrator = IsotonicCalibrator().fit(insample_proba, labels)
+    calibration_insample = insample_calibrator.report(insample_proba, labels)
+
+    # WO-4: Replay OOS probabilities through the honest backtester.
+    if len(result.oos_probabilities) > 0:
+        try:
+            oos_economics = evaluate_oos_economics(
+                oos_probabilities=result.oos_probabilities,
+                aligned_prices=aligned_prices.loc[clean.index],
+            )
+        except Exception as exc:
+            logger.warning("Economic gate evaluation failed, using zeroed metrics: %s", exc)
+            oos_economics = EconomicMetrics()
+    else:
+        oos_economics = EconomicMetrics()
 
     approved = (
         len(result.oos_predictions) >= gate.min_oos_samples
         and result.oos_score >= max(bh, sma) + gate.min_oos_accuracy_edge
-        and calibration["expected_calibration_error"] <= gate.max_calibration_error
+        and calibration_oos["expected_calibration_error"] <= gate.max_calibration_error
+        and oos_economics.net_pnl_after_costs >= gate.min_oos_net_pnl
+        and oos_economics.ev_per_trade >= gate.min_ev_per_trade
+        and oos_economics.profit_factor >= gate.min_profit_factor
+        and oos_economics.n_trades >= gate.min_oos_trades
     )
-    status = ModelStatus.CHALLENGER if approved else ModelStatus.CANDIDATE
+
+    # WO-5: Shadow degradation gate — if the refitted artifact degrades
+    # substantially on the holdout, demote to CANDIDATE for human review.
+    shadow_degraded = False
+    if shadow_metrics:
+        accuracy_drop = result.oos_score - shadow_metrics.get("shadow_accuracy", result.oos_score)
+        if accuracy_drop > 0.05:
+            shadow_degraded = True
+            logger.warning(
+                "Shadow degradation: accuracy dropped %.1f%% vs OOS — demoting to CANDIDATE",
+                accuracy_drop * 100,
+            )
+        if shadow_metrics.get("shadow_net_pnl", 0) < 0:
+            shadow_degraded = True
+            logger.warning(
+                "Shadow degradation: negative net PnL on holdout — demoting to CANDIDATE"
+            )
+
+    status = ModelStatus.CHALLENGER if (approved and not shadow_degraded) else ModelStatus.CANDIDATE
     metadata = ModelMetadata(
         model_id=model_id,
         version=version,
@@ -230,18 +339,28 @@ def train_direction_champion_candidate(
             "oos_accuracy": float(result.oos_score),
             "buy_hold_accuracy": float(bh),
             "sma_accuracy": float(sma),
-            "expected_calibration_error": float(calibration["expected_calibration_error"]),
+            "expected_calibration_error": float(calibration_oos["expected_calibration_error"]),
+            "expected_calibration_error_insample": float(
+                calibration_insample["expected_calibration_error"]
+            ),
             "oos_samples": float(len(result.oos_predictions)),
+            **oos_economics.to_dict(),
+            **shadow_metrics,
         },
         hyperparameters={"horizon": horizon, "threshold": threshold},
-        description="Alpaca production candidate; champion promotion requires explicit review.",
+        description=(
+            "Artifact refit on all training data after walk-forward; OOS metrics "
+            "estimate fold behavior, shadow metrics measure the deployed artifact "
+            "on untouched data."
+        ),
     )
-    registry.register_model(metadata, model=fitted)
+    registry.register_model(metadata, model=fitted, calibrator=calibrator)
     report = {
         "approved_for_challenger": approved,
         "walk_forward": result.summary(),
         "baselines": {"buy_and_hold": bh, "sma": sma},
-        "calibration": calibration,
+        "calibration_oos": calibration_oos,
+        "calibration_insample_diagnostic": calibration_insample,
         "model": metadata.to_dict(),
     }
     if report_path is not None:

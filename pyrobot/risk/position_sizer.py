@@ -3,18 +3,26 @@
 Provides multiple sizing algorithms to determine optimal order quantities
 based on account equity, risk parameters, and signal confidence.
 
+The ``confidence`` input **must** be derived from calibrated probabilities
+(see ``pyrobot.ai.calibration.IsotonicCalibrator`` and WO-1).  In the
+standard pipeline ``confidence = |p_calibrated − 0.5| × 2`` where
+``p_calibrated`` is the output of the ensemble engine's calibrator-transformed
+direction probability.  Kelly sizing additionally requires realized
+``win_rate``, ``avg_win``, and ``avg_loss`` from trade history — never
+placeholders.  The fixed-fraction path uses only ``confidence`` for scaling.
+
 Usage::
 
     sizer = PositionSizer(limits=RiskLimits())
 
-    # Kelly Criterion sizing
+    # Kelly Criterion sizing (requires real trade history)
     qty = sizer.kelly_size(
         account_equity=100_000.0,
-        win_rate=0.55,
-        avg_win=0.03,
-        avg_loss=0.02,
+        win_rate=0.55,        # from realized trade history
+        avg_win=0.03,         # from realized trade history
+        avg_loss=0.02,        # from realized trade history
         price=150.0,
-        confidence=0.8,
+        confidence=0.8,       # from calibrated probability
     )
 
     # Fixed-fraction sizing
@@ -23,6 +31,7 @@ Usage::
         risk_per_trade_pct=0.01,
         stop_distance=5.0,
         price=150.0,
+        confidence=0.8,       # from calibrated probability
     )
 """
 
@@ -69,13 +78,17 @@ class PositionSizer:
 
         We then apply kelly_fraction (default half-Kelly) and confidence scaling.
 
+        **Important:** ``win_rate``, ``avg_win``, and ``avg_loss`` must come
+        from realized trade history, never from placeholders.  ``confidence``
+        must be derived from calibrated probabilities (see WO-1).
+
         Args:
             account_equity: Current portfolio equity in dollars.
-            win_rate: Historical win rate (0.0 to 1.0).
+            win_rate: Historical win rate (0.0 to 1.0) — from trade history.
             avg_win: Average winning trade return (as decimal, e.g. 0.03 for 3%).
             avg_loss: Average losing trade return (as decimal, must be positive).
             price: Current market price per share.
-            confidence: Signal confidence (0.0 to 1.0), scales the position.
+            confidence: Signal confidence (0.0 to 1.0), from calibrated probabilities.
 
         Returns:
             Number of shares (rounded down, minimum 0).
@@ -127,12 +140,15 @@ class PositionSizer:
 
         Position size = (equity * risk_pct * confidence) / stop_distance
 
+        ``confidence`` must be derived from calibrated probabilities (WO-1):
+        ``confidence = |p_calibrated − 0.5| × 2``.
+
         Args:
             account_equity: Current portfolio equity in dollars.
             risk_per_trade_pct: Fraction of equity to risk per trade (e.g. 0.01 = 1%).
             stop_distance: Distance from entry to stop loss in dollars per share.
             price: Current market price per share.
-            confidence: Signal confidence (0.0 to 1.0).
+            confidence: Signal confidence (0.0 to 1.0), from calibrated probabilities.
 
         Returns:
             Number of shares (rounded down, minimum 0).

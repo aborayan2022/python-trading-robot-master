@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from pyrobot.ai.calibration import IsotonicCalibrator
@@ -115,3 +116,120 @@ def test_train_direction_candidate_registers_artifact(tmp_path):
     assert meta.artifact_path
     assert report["walk_forward"]["n_oos_predictions"] > 0
     assert (tmp_path / "report.json").exists()
+
+
+class TestWO3OOSECE:
+    """WO-3: Calibration gate must use OOS predictions, not in-sample."""
+
+    def test_ece_gate_uses_oos_predictions(self):
+        """OOS probabilities are collected and available for calibration gating.
+
+        The run_walk_forward function must populate oos_probabilities when
+        proba_fn is provided, enabling downstream OOS ECE computation.
+        """
+        from pyrobot.backtesting.walk_forward import run_walk_forward
+
+        rng = np.random.default_rng(55)
+        n = 200
+        dates = pd.date_range("2023-01-01", periods=n, freq="B")
+
+        X = pd.DataFrame({"f1": rng.normal(size=n), "f2": rng.normal(size=n)}, index=dates)
+        true_y = (X["f1"] * 0.3 + X["f2"] * 0.2 + rng.normal(0, 0.5, size=n) > 0).astype(int)
+
+        class SimpleModel:
+            def fit(self, X_frame, y_series):
+                self._p = float(y_series.mean())
+            def predict(self, X_frame):
+                return (np.ones(len(X_frame)) * self._p > 0.5).astype(int)
+            def predict_proba(self, X_frame):
+                p = np.full(len(X_frame), min(max(self._p, 0.01), 0.99))
+                return np.column_stack([1 - p, p])
+
+        result = run_walk_forward(
+            X, true_y,
+            model_factory=SimpleModel,
+            train_fn=lambda m, x, y: m.fit(x, y),
+            predict_fn=lambda m, x: m.predict(x),
+            metric_fn=lambda y, p: float(np.mean(y.to_numpy() == np.asarray(p, dtype=int))),
+            n_splits=3,
+            train_period_days=60,
+            test_period_days=20,
+            embargo_days=1,
+            expanding=True,
+            purge_bars=5,
+            proba_fn=lambda m, x: m.predict_proba(x),
+        )
+
+        # OOS probabilities must be collected
+        assert len(result.oos_probabilities) > 0
+        assert len(result.oos_probabilities) == len(result.oos_labels)
+
+        # Fit calibrator on OOS and verify ECE is computable
+        oos_cal = IsotonicCalibrator().fit(result.oos_probabilities, result.oos_labels)
+        oos_report = oos_cal.report(result.oos_probabilities, result.oos_labels)
+        assert "expected_calibration_error" in oos_report
+        assert oos_report["expected_calibration_error"] >= 0.0
+
+        # Without proba_fn, oos_probabilities must be empty
+        result_no_proba = run_walk_forward(
+            X, true_y,
+            model_factory=SimpleModel,
+            train_fn=lambda m, x, y: m.fit(x, y),
+            predict_fn=lambda m, x: m.predict(x),
+            metric_fn=lambda y, p: float(np.mean(y.to_numpy() == np.asarray(p, dtype=int))),
+            n_splits=3,
+            train_period_days=60,
+            test_period_days=20,
+            embargo_days=1,
+            expanding=True,
+            purge_bars=5,
+        )
+        assert len(result_no_proba.oos_probabilities) == 0
+
+    def test_gate_rejects_overconfident_model(self):
+        """An overconfident model should fail the OOS calibration gate.
+
+        Under in-sample gating it would pass (ECE ≈ 0 after isotonic fit),
+        but under OOS gating the material miscalibration is detected.
+        """
+        from pyrobot.backtesting.walk_forward import run_walk_forward
+
+        rng = np.random.default_rng(66)
+        n = 200
+        dates = pd.date_range("2023-01-01", periods=n, freq="B")
+
+        X = pd.DataFrame({"f1": rng.normal(size=n)}, index=dates)
+        true_y = pd.Series((X["f1"] > 0).astype(int), index=dates)
+
+        class OverconfidentModel:
+            def fit(self, X_frame, y_series):
+                pass
+            def predict(self, X_frame):
+                return np.ones(len(X_frame), dtype=int)
+            def predict_proba(self, X_frame):
+                p = np.full(len(X_frame), 0.95)
+                return np.column_stack([1 - p, p])
+
+        result = run_walk_forward(
+            X, true_y,
+            model_factory=OverconfidentModel,
+            train_fn=lambda m, x, y: m.fit(x, y),
+            predict_fn=lambda m, x: m.predict(x),
+            metric_fn=lambda y, p: float(np.mean(y.to_numpy() == np.asarray(p, dtype=int))),
+            n_splits=3,
+            train_period_days=60,
+            test_period_days=20,
+            embargo_days=1,
+            expanding=True,
+            purge_bars=5,
+            proba_fn=lambda m, x: m.predict_proba(x),
+        )
+
+        # Fit calibrator on OOS probabilities
+        oos_cal = IsotonicCalibrator().fit(result.oos_probabilities, result.oos_labels)
+        oos_report = oos_cal.report(result.oos_probabilities, result.oos_labels)
+
+        # OOS ECE should be material (model is overconfident and wrong OOS)
+        # The gate with max_calibration_error=0.15 should reject this
+        gate = TrainingGateConfig(max_calibration_error=0.15)
+        assert oos_report["expected_calibration_error"] > gate.max_calibration_error

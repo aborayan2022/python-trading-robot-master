@@ -22,7 +22,14 @@ class WalkForwardSplit:
 
 
 class WalkForwardValidator:
-    """Generates Walk-Forward rolling/expanding windows with purging and embargo."""
+    """Generates Walk-Forward rolling/expanding windows with purging and embargo.
+
+    Purging invariant (WO-2): ``purge_bars`` removes training rows whose
+    timestamps lie within the purge window before ``test_start``.  This is
+    essential when labels have a forward horizon — every training sample whose
+    label could overlap with the first test sample must be dropped.  The rule
+    is ``purge_bars >= label_horizon`` (enforced by callers, not here).
+    """
 
     def __init__(
         self,
@@ -31,15 +38,23 @@ class WalkForwardValidator:
         test_period_days: int = 63,
         embargo_days: int = 5,
         expanding: bool = False,
+        purge_bars: int = 0,
     ) -> None:
         self.n_splits = n_splits
         self.train_period_days = train_period_days
         self.test_period_days = test_period_days
         self.embargo_days = embargo_days
         self.expanding = expanding
+        self.purge_bars = purge_bars
 
     def split(self, df: pd.DataFrame) -> Generator[WalkForwardSplit, None, None]:
-        """Generate Walk-Forward splits from a time-indexed DataFrame."""
+        """Generate Walk-Forward splits from a time-indexed DataFrame.
+
+        When ``purge_bars > 0``, training rows whose timestamp is within
+        ``purge_bars`` bars of ``test_start`` are dropped.  Purging is by
+        **bar count** (not calendar days) so it works correctly for both
+        daily and intraday data.
+        """
         if not isinstance(df.index, (pd.DatetimeIndex, pd.MultiIndex)):
             raise ValueError("DataFrame index must be a DatetimeIndex or MultiIndex with timestamps.")
 
@@ -77,12 +92,22 @@ class WalkForwardValidator:
             t_test_start = unique_dates[test_start_idx]
             t_test_end = unique_dates[test_end_idx - 1]
 
-            # Boolean masks
+            # Boolean masks — calendar-day granularity (embargo)
             train_mask = (timestamps >= t_train_start) & (timestamps <= t_train_end)
             test_mask = (timestamps >= t_test_start) & (timestamps <= t_test_end)
 
             train_idx = np.where(train_mask)[0]
             test_idx = np.where(test_mask)[0]
+
+            # Bar-level purging: drop training rows whose index position is within
+            # purge_bars of test_start.  This prevents label leakage when the
+            # label horizon extends beyond the calendar embargo gap.
+            # Purging is by bar count (not calendar days) so it works correctly
+            # for both daily and intraday data.
+            if self.purge_bars > 0 and len(train_idx) > 0 and len(test_idx) > 0:
+                test_start_pos = test_idx[0]
+                purge_boundary = test_start_pos - self.purge_bars
+                train_idx = train_idx[train_idx < purge_boundary]
 
             yield WalkForwardSplit(
                 fold_index=i,
@@ -103,6 +128,7 @@ class WalkForwardResult:
     oos_score: float = 0.0
     oos_predictions: np.ndarray = field(default_factory=lambda: np.array([]))
     oos_labels: np.ndarray = field(default_factory=lambda: np.array([]))
+    oos_probabilities: np.ndarray = field(default_factory=lambda: np.array([]))
 
     def summary(self) -> dict:
         return {
@@ -126,6 +152,8 @@ def run_walk_forward(
     test_period_days: int = 63,
     embargo_days: int = 5,
     expanding: bool = True,
+    purge_bars: int = 0,
+    proba_fn: Callable[[Any, pd.DataFrame], np.ndarray] | None = None,
 ) -> WalkForwardResult:
     """Run a full walk-forward evaluation: re-fit per fold, score out-of-sample.
 
@@ -142,6 +170,14 @@ def run_walk_forward(
         metric_fn: (y_true, y_pred) -> float (higher is better).
         n_splits/train_period_days/test_period_days/embargo_days/expanding:
             Fold geometry forwarded to WalkForwardValidator.
+        purge_bars: Number of bars before test_start to remove from training
+            data.  Invariant: ``purge_bars >= label_horizon`` to prevent
+            label leakage across folds.
+        proba_fn: Optional (model, X_test) -> np.ndarray of probabilities.
+            When provided, OOS probabilities are collected alongside
+            predictions for downstream calibration and ECE evaluation.
+            The returned array must have shape (n_samples, n_classes) or
+            (n_samples,) for binary positive-class probabilities.
 
     Returns:
         WalkForwardResult with per-fold scores, the aggregated OOS score computed
@@ -154,11 +190,13 @@ def run_walk_forward(
         test_period_days=test_period_days,
         embargo_days=embargo_days,
         expanding=expanding,
+        purge_bars=purge_bars,
     )
 
     result = WalkForwardResult()
     oos_preds: List[np.ndarray] = []
     oos_labels: List[np.ndarray] = []
+    oos_probas: List[np.ndarray] = []
 
     for split in validator.split(df):
         train_idx = split.train_indices
@@ -176,9 +214,18 @@ def run_walk_forward(
         oos_preds.append(preds)
         oos_labels.append(labels.iloc[test_idx].to_numpy())
 
+        if proba_fn is not None:
+            proba = np.asarray(proba_fn(model, df.iloc[test_idx]))
+            # Accept (n,) or (n, 2) — extract positive-class column
+            if proba.ndim == 2 and proba.shape[1] >= 2:
+                proba = proba[:, 1]
+            oos_probas.append(proba)
+
     if oos_preds:
         result.oos_predictions = np.concatenate(oos_preds)
         result.oos_labels = np.concatenate(oos_labels)
         result.oos_score = float(metric_fn(pd.Series(result.oos_labels), result.oos_predictions))
+        if oos_probas:
+            result.oos_probabilities = np.concatenate(oos_probas)
 
     return result

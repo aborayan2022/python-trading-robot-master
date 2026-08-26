@@ -7,7 +7,10 @@ from typing import Dict
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
+
+fastapi = pytest.importorskip("fastapi")
+
+from fastapi.testclient import TestClient  # noqa: E402
 
 from pyrobot.console.app import create_app
 from pyrobot.console.supervisor import ConsoleConfig, RuntimeSupervisor, SupervisorState

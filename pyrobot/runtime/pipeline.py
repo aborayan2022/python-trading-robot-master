@@ -324,6 +324,11 @@ class TradingPipeline:
                 if quantity <= 0:
                     return {"symbol": symbol, "action": signal.action.value, "status": "NO_POSITION"}
             else:
+                # WO-7: Fixed-fraction sizing only — win_rate/avg_win/avg_loss are
+                # Kelly parameters that the fixed-fraction path ignores.
+                # Confidence floor of 0.05 prevents zero-size on valid signals
+                # (a calibrated probability near 0.5 still has a small edge);
+                # it never applies to NO_TRADE paths (exits are quantity-based).
                 quantity = self.risk_manager.calculate_position_size(
                     account_equity=equity,
                     win_rate=0.0,

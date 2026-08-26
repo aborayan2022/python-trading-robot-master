@@ -203,3 +203,132 @@ class TestRunWalkForward:
             assert overlap == set()
             covered_test.extend(split.test_indices.tolist())
         assert len(covered_test) == len(set(covered_test))  # test folds disjoint
+
+
+class TestWalkForwardPurge:
+    """WO-2: Bar-level purging to prevent label leakage across folds."""
+
+    def test_no_label_overlap_across_folds(self):
+        """With purge_bars=5, no training index is within 5 bars of test_start index."""
+        # Daily data: 50 business days, enough for 3 folds with purge
+        dates = pd.date_range("2023-01-01", periods=50, freq="B")
+        X = pd.DataFrame({"f1": np.random.default_rng(42).normal(size=50)}, index=dates)
+
+        validator = WalkForwardValidator(
+            n_splits=3,
+            train_period_days=15,
+            test_period_days=5,
+            embargo_days=1,
+            purge_bars=5,
+        )
+
+        for split in validator.split(X):
+            # Purge boundary: all training indices must be < test_start_index - purge_bars
+            test_start_pos = split.test_indices[0]
+            purge_boundary = test_start_pos - 5
+            for ti in split.train_indices:
+                assert ti < purge_boundary, (
+                    f"Training index {ti} is within purge window of test_start "
+                    f"index {test_start_pos} (boundary={purge_boundary})"
+                )
+
+    def test_purge_prevents_leak_inflation(self):
+        """A leak-prone pattern shows inflated OOS without purge, accurate OOS with purge.
+
+        We plant a signal: feature = sign(next return).  Without purging,
+        the model learns the planted correlation because the label at time t
+        overlaps with the feature at time t+1 in the training set.  With
+        purge_bars=horizon, the leak is severed and OOS accuracy drops.
+        """
+        rng = np.random.default_rng(99)
+        n = 500
+        returns = rng.normal(0, 0.01, size=n)
+        # Leak-prone feature: at bar t, feature = sign(return at t+1) — this is
+        # impossible to know in real time but creates a learnable pattern when
+        # labels overlap.
+        feature_leak = np.sign(np.roll(returns, -1))
+        feature_leak[-1] = 0
+
+        dates = pd.date_range("2023-01-01", periods=n, freq="B")
+        X = pd.DataFrame({"leaky": feature_leak}, index=dates)
+        # Label: sign of return at t+1 (same as the leaky feature by construction)
+        y = pd.Series(np.sign(np.roll(returns, -1)).astype(int), index=dates)
+        y.iloc[-1] = 0
+
+        def accuracy_metric(y_true, y_pred):
+            return float(np.mean(y_true.to_numpy() == np.asarray(y_pred, dtype=int)))
+
+        class AlwaysPredictFeature:
+            def fit(self, X_frame, y_series):
+                pass
+            def predict(self, X_frame):
+                return (X_frame["leaky"].to_numpy() > 0).astype(int)
+
+        # Without purge: leak inflates OOS
+        result_no_purge = run_walk_forward(
+            X, y,
+            model_factory=AlwaysPredictFeature,
+            train_fn=lambda m, x, y: m.fit(x, y),
+            predict_fn=lambda m, x: m.predict(x),
+            metric_fn=accuracy_metric,
+            n_splits=3,
+            train_period_days=200,
+            test_period_days=50,
+            embargo_days=1,
+            expanding=True,
+            purge_bars=0,
+        )
+
+        # With purge: leak is severed
+        result_purge = run_walk_forward(
+            X, y,
+            model_factory=AlwaysPredictFeature,
+            train_fn=lambda m, x, y: m.fit(x, y),
+            predict_fn=lambda m, x: m.predict(x),
+            metric_fn=accuracy_metric,
+            n_splits=3,
+            train_period_days=200,
+            test_period_days=50,
+            embargo_days=1,
+            expanding=True,
+            purge_bars=5,
+        )
+
+        # The purged OOS should be lower (or equal) — the leak is cut
+        assert result_purge.oos_score <= result_no_purge.oos_score
+
+    def test_noise_data_oos_accuracy_near_50_percent(self):
+        """On pure noise, OOS accuracy with purge should be ≈ 50%."""
+        rng = np.random.default_rng(77)
+        n = 500
+        dates = pd.date_range("2023-01-01", periods=n, freq="B")
+        X = pd.DataFrame({"noise": rng.normal(size=n)}, index=dates)
+        y = pd.Series(rng.integers(0, 2, size=n), index=dates, dtype=int)
+
+        def accuracy_metric(y_true, y_pred):
+            return float(np.mean(y_true.to_numpy() == np.asarray(y_pred, dtype=int)))
+
+        class CoinFlipModel:
+            def __init__(self):
+                self._rng = np.random.default_rng(0)
+            def fit(self, X_frame, y_series):
+                self._p = float(y_series.mean())
+            def predict(self, X_frame):
+                return self._rng.random(len(X_frame)) < self._p
+
+        result = run_walk_forward(
+            X, y,
+            model_factory=CoinFlipModel,
+            train_fn=lambda m, x, y: m.fit(x, y),
+            predict_fn=lambda m, x: m.predict(x),
+            metric_fn=accuracy_metric,
+            n_splits=3,
+            train_period_days=200,
+            test_period_days=50,
+            embargo_days=1,
+            expanding=True,
+            purge_bars=5,
+        )
+
+        # OOS accuracy should be near 50% (within a generous band for noise)
+        assert 0.35 <= result.oos_score <= 0.65

@@ -52,6 +52,9 @@ class ModelMetadata:
     description: str = ""
     artifact_path: Optional[str] = None
     artifact_sha256: Optional[str] = None
+    calibration_path: Optional[str] = None
+    calibration_sha256: Optional[str] = None
+    n_trials: int = 1
 
     def to_dict(self) -> Dict:
         return {
@@ -71,6 +74,9 @@ class ModelMetadata:
             "description": self.description,
             "artifact_path": self.artifact_path,
             "artifact_sha256": self.artifact_sha256,
+            "calibration_path": self.calibration_path,
+            "calibration_sha256": self.calibration_sha256,
+            "n_trials": self.n_trials,
         }
 
     @classmethod
@@ -96,6 +102,9 @@ class ModelMetadata:
             description=data.get("description", ""),
             artifact_path=data.get("artifact_path"),
             artifact_sha256=data.get("artifact_sha256"),
+            calibration_path=data.get("calibration_path"),
+            calibration_sha256=data.get("calibration_sha256"),
+            n_trials=data.get("n_trials", 1),
         )
 
 
@@ -136,7 +145,12 @@ class ModelRegistry:
         """Filesystem-safe artifact name (ids sanitized against path tricks)."""
         return f"{_SAFE_ID.sub('_', model_id)}_{_SAFE_ID.sub('_', version)}"
 
-    def register_model(self, metadata: ModelMetadata, model: Optional[BaseQuantModel] = None) -> None:
+    def register_model(
+        self,
+        metadata: ModelMetadata,
+        model: Optional[BaseQuantModel] = None,
+        calibrator: Optional[Any] = None,
+    ) -> None:
         """Register a candidate model; optionally persist its fitted artifact.
 
         Args:
@@ -144,6 +158,9 @@ class ModelRegistry:
             model: Fitted model instance. When provided, its parameters are
                 written to a .npz artifact next to the metadata and the SHA-256
                 checksum is recorded so load_model() can verify integrity.
+            calibrator: Optional fitted IsotonicCalibrator. When provided, it
+                is persisted alongside the model artifact as a separate .npz
+                file with its own SHA-256 checksum.
         """
         with self._lock:
             key = f"{metadata.model_id}:{metadata.version}"
@@ -161,11 +178,23 @@ class ModelRegistry:
                     metadata.artifact_path = str(artifact_path)
                     metadata.artifact_sha256 = self._sha256(artifact_path)
 
+            if calibrator is not None and self.registry_dir is not None:
+                if not getattr(calibrator, "is_fitted", False):
+                    raise ValueError(
+                        f"Cannot register unfitted calibrator for {key} — fit() it first"
+                    )
+                safe_name = self._safe_filename(metadata.model_id, metadata.version)
+                calib_path = self.registry_dir / f"{safe_name}.calib.npz"
+                calibrator.save(calib_path)
+                metadata.calibration_path = str(calib_path)
+                metadata.calibration_sha256 = self._sha256(calib_path)
+
             self._save_to_disk(metadata)
             logger.info(
-                "Registered model %s (type=%s, status=%s, artifact=%s)",
+                "Registered model %s (type=%s, status=%s, artifact=%s, calibrator=%s)",
                 key, metadata.model_type, metadata.status.value,
                 "yes" if metadata.artifact_path else "no",
+                "yes" if metadata.calibration_path else "no",
             )
 
     @staticmethod
@@ -195,6 +224,30 @@ class ModelRegistry:
             )
         model_cls = model_class_for_type(meta.model_type)
         return model_cls.load(artifact)
+
+    def load_calibrator(self, model_id: str, version: str):
+        """Load a fitted calibrator artifact by id and version, verifying its checksum.
+
+        Returns None if no calibrator is registered for this model (graceful
+        degradation — the caller should log a warning).
+        """
+        from pyrobot.ai.calibration import IsotonicCalibrator
+
+        meta = self.get_model(model_id, version)
+        if not meta.calibration_path:
+            return None
+        calib_path = Path(meta.calibration_path)
+        if not calib_path.exists():
+            logger.warning(
+                "Calibrator artifact missing for %s:%s at %s",
+                model_id, version, calib_path,
+            )
+            return None
+        if meta.calibration_sha256 and self._sha256(calib_path) != meta.calibration_sha256:
+            raise ArtifactIntegrityError(
+                f"Calibrator checksum mismatch for {model_id}:{version} — tampered or corrupted"
+            )
+        return IsotonicCalibrator.load(calib_path)
 
     def get_model(self, model_id: str, version: str) -> ModelMetadata:
         """Retrieve model metadata by ID and version."""
@@ -244,6 +297,12 @@ class ModelRegistry:
             "sma_accuracy",
             "expected_calibration_error",
             "oos_samples",
+            # WO-4: Economic metrics are mandatory for champion promotion.
+            "net_pnl_after_costs",
+            "sharpe",
+            "profit_factor",
+            "n_trades",
+            "ev_per_trade",
         }
         missing = required.difference(meta.oos_metrics)
         if missing:
@@ -258,6 +317,19 @@ class ModelRegistry:
         if meta.oos_metrics["expected_calibration_error"] > 0.15:
             raise ModelNotApprovedError(
                 f"Model {meta.model_id}:{meta.version} cannot be champion: calibration error too high"
+            )
+        # WO-4: Economic gate — a model that cannot show economics cannot be champion.
+        if meta.oos_metrics["net_pnl_after_costs"] < 0:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: negative net PnL after costs"
+            )
+        if meta.oos_metrics["ev_per_trade"] <= 0:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: EV per trade ≤ 0"
+            )
+        if meta.oos_metrics["n_trades"] < 10:
+            raise ModelNotApprovedError(
+                f"Model {meta.model_id}:{meta.version} cannot be champion: too few trades ({meta.oos_metrics['n_trades']})"
             )
 
     def promote_to_challenger(self, model_id: str, version: str) -> ModelMetadata:

@@ -1,6 +1,7 @@
 """Unit tests for the AI & Machine Learning Quantitative Platform."""
 
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -39,6 +40,13 @@ class TestModelRegistry:
             "sma_accuracy": 0.56,
             "expected_calibration_error": 0.05,
             "oos_samples": 100,
+            # WO-4: Economic metrics required for champion promotion
+            "net_pnl_after_costs": 5000.0,
+            "sharpe": 1.5,
+            "max_drawdown": -0.05,
+            "profit_factor": 1.8,
+            "n_trades": 30,
+            "ev_per_trade": 150.0,
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
             registry = ModelRegistry(registry_dir=tmp_dir)
@@ -378,6 +386,12 @@ class TestEnsembleSignalEngine:
                     "sma_accuracy": 0.56,
                     "expected_calibration_error": 0.05,
                     "oos_samples": 120,
+                    "net_pnl_after_costs": 5000.0,
+                    "sharpe": 1.5,
+                    "max_drawdown": -0.05,
+                    "profit_factor": 1.8,
+                    "n_trades": 30,
+                    "ev_per_trade": 150.0,
                 },
             )
             registry.register_model(meta, model=model)
@@ -509,3 +523,148 @@ class TestLexiconSentimentEngine:
         assert "EXECUTED" in explanation
         assert "AAPL" in explanation
         assert "BULL" in explanation
+
+
+class TestWO1CalibratorPersistence:
+    """WO-1: Calibrator must be persisted, loaded, and applied at inference."""
+
+    def test_calibrator_save_load_round_trip(self, tmp_path):
+        """save() + load() produces identical transform output."""
+        from pyrobot.ai.calibration import IsotonicCalibrator
+
+        rng = np.random.default_rng(42)
+        probs = rng.uniform(0.1, 0.9, size=200)
+        labels = (probs + rng.normal(0, 0.1, size=200) > 0.5).astype(int)
+
+        cal = IsotonicCalibrator().fit(probs, labels)
+        original = cal.transform(probs)
+
+        path = tmp_path / "calib.npz"
+        cal.save(path)
+        loaded = IsotonicCalibrator.load(path)
+
+        assert loaded.is_fitted
+        np.testing.assert_array_equal(original, loaded.transform(probs))
+
+    def test_calibrator_registry_round_trip(self, tmp_path):
+        """Register model + calibrator, load in a fresh engine, assert identical."""
+        from pyrobot.ai.calibration import IsotonicCalibrator
+
+        rng = np.random.default_rng(43)
+        X = pd.DataFrame({"f1": rng.normal(size=100), "f2": rng.normal(size=100)})
+        y = pd.Series((X["f1"] > 0).astype(int))
+
+        model = LogisticDirectionModel(model_id="test_model", version="v1")
+        model.fit(X, y)
+
+        probs = model.predict_proba(X)[:, 1]
+        cal = IsotonicCalibrator().fit(probs, y)
+
+        registry = ModelRegistry(tmp_path / "models")
+        meta = ModelMetadata(
+            model_id="test_model",
+            version="v1",
+            model_type="logistic_direction",
+            target_variable="dir_5",
+            features=["f1", "f2"],
+            training_start="2026-01-01",
+            training_end="2026-01-31",
+        )
+        registry.register_model(meta, model=model, calibrator=cal)
+
+        # Load calibrator from registry
+        loaded_cal = registry.load_calibrator("test_model", "v1")
+        assert loaded_cal is not None
+        assert loaded_cal.is_fitted
+
+        # Transform must be identical
+        original_transform = cal.transform(np.array([0.3, 0.7]))
+        loaded_transform = loaded_cal.transform(np.array([0.3, 0.7]))
+        np.testing.assert_array_almost_equal(original_transform, loaded_transform)
+
+    def test_calibrator_tamper_detected(self, tmp_path):
+        """Modify one byte of .calib.npz → ArtifactIntegrityError."""
+        from pyrobot.ai.calibration import IsotonicCalibrator
+        from pyrobot.ai.registry import ArtifactIntegrityError
+
+        rng = np.random.default_rng(44)
+        probs = rng.uniform(0.1, 0.9, size=50)
+        labels = (probs > 0.5).astype(int)
+
+        cal = IsotonicCalibrator().fit(probs, labels)
+        model = LogisticDirectionModel(model_id="tamper_test", version="v1")
+        X = pd.DataFrame({"f1": rng.normal(size=50)})
+        y = pd.Series(labels)
+        model.fit(X, y)
+
+        registry = ModelRegistry(tmp_path / "models")
+        meta = ModelMetadata(
+            model_id="tamper_test",
+            version="v1",
+            model_type="logistic_direction",
+            target_variable="dir_5",
+            features=["f1"],
+            training_start="2026-01-01",
+            training_end="2026-01-31",
+        )
+        registry.register_model(meta, model=model, calibrator=cal)
+
+        # Tamper with the calibrator file
+        calib_path = Path(meta.calibration_path)
+        data = bytearray(calib_path.read_bytes())
+        data[10] ^= 0xFF  # flip bits
+        calib_path.write_bytes(bytes(data))
+
+        with pytest.raises(ArtifactIntegrityError):
+            registry.load_calibrator("tamper_test", "v1")
+
+    def test_threshold_sees_calibrated_probability(self):
+        """Raw p=0.82 but calibrated p=0.74 → NO_TRADE (below 0.80 threshold)."""
+        from pyrobot.ai.calibration import IsotonicCalibrator
+
+        # Build a calibrator that shifts 0.82 down to 0.74
+        # Train on data where 0.80-0.85 probabilities correspond to ~0.74 true rate
+        train_probs = np.array([0.70, 0.75, 0.80, 0.82, 0.85, 0.90])
+        train_labels = np.array([0, 0, 1, 1, 0, 1])
+        cal = IsotonicCalibrator().fit(train_probs, train_labels)
+
+        # Raw 0.82 should be above threshold
+        assert 0.82 >= 0.80
+
+        # But calibrated 0.74 should be below threshold
+        calibrated = cal.transform(np.array([0.82]))[0]
+        assert calibrated < 0.80
+
+        class MockModel:
+            is_fitted = True
+            model_id = "mock"
+            version = "v1"
+            def predict_proba(self, X):
+                return np.array([[0.18, 0.82]])
+
+        # Features must include OHLCV columns for regime detector
+        features = pd.DataFrame({
+            "open": [100.0],
+            "high": [101.0],
+            "low": [99.0],
+            "close": [100.5],
+            "volume": [1000000],
+        })
+
+        # Without calibrator: would be BUY (0.82 >= 0.80)
+        engine_no_cal = EnsembleSignalEngine(
+            direction_model=MockModel(),
+            calibrator=None,
+            min_probability=0.80,
+        )
+        sig_no_cal = engine_no_cal.generate_signal("TEST", features)
+        assert sig_no_cal.action == SignalAction.BUY
+
+        # With calibrator: should be NO_TRADE (calibrated 0.74 < 0.80)
+        engine_cal = EnsembleSignalEngine(
+            direction_model=MockModel(),
+            calibrator=cal,
+            min_probability=0.80,
+        )
+        sig_cal = engine_cal.generate_signal("TEST", features)
+        assert sig_cal.action == SignalAction.NO_TRADE

@@ -8,14 +8,18 @@ Decision rules (single explicit threshold, no redundant conditions):
   covers (BUY_TO_COVER) when prob_up > 1 - exit_threshold.
 
 If fitted models are not supplied, the engine lazily loads the registry's
-champion models (direction + volatility) on first use.
+champion models (direction + volatility) on first use.  When a calibrator
+is registered alongside the champion, it is applied to raw probabilities
+before threshold comparison (WO-1).
 """
 
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
+import numpy as np
 import pandas as pd
 
+from pyrobot.ai.calibration import IsotonicCalibrator
 from pyrobot.ai.models import LogisticDirectionModel, VolatilityForecaster
 from pyrobot.ai.registry import ModelRegistry
 from pyrobot.features.regime import MarketRegime, MarketRegimeDetector
@@ -41,6 +45,7 @@ class EnsembleSignalEngine:
         direction_model: Optional[LogisticDirectionModel] = None,
         volatility_model: Optional[VolatilityForecaster] = None,
         regime_detector: Optional[MarketRegimeDetector] = None,
+        calibrator: Optional[IsotonicCalibrator] = None,
         min_probability: float = 0.80,
         exit_probability: float = 0.45,
         default_volatility: float = 0.02,
@@ -53,13 +58,14 @@ class EnsembleSignalEngine:
         self.direction_model = direction_model
         self.volatility_model = volatility_model
         self.regime_detector = regime_detector or MarketRegimeDetector()
+        self.calibrator = calibrator
         self.min_probability = min_probability
         self.exit_probability = exit_probability
         self.default_volatility = default_volatility
         self._registry_models_loaded = False
 
     def _ensure_models_loaded(self) -> None:
-        """Lazily load champion models from the registry when models were not injected."""
+        """Lazily load champion models and calibrator from the registry."""
         if self._registry_models_loaded or self.registry is None:
             return
         self._registry_models_loaded = True
@@ -78,6 +84,19 @@ class EnsembleSignalEngine:
                 logger.info("Loaded champion direction model %s:%s", champion.model_id, champion.version)
         except Exception as exc:
             logger.warning("Failed to load champion direction artifact: %s", exc)
+        # WO-1: Load calibrator when available
+        try:
+            if self.calibrator is None:
+                loaded_cal = self.registry.load_calibrator(champion.model_id, champion.version)
+                if loaded_cal is not None:
+                    self.calibrator = loaded_cal
+                    logger.info("Loaded calibrator for champion %s:%s", champion.model_id, champion.version)
+                else:
+                    logger.warning(
+                        "Champion loaded WITHOUT calibrator — thresholds operate on uncalibrated probabilities"
+                    )
+        except Exception as exc:
+            logger.warning("Failed to load calibrator: %s", exc)
         # Volatility model: fall back to scanning for a champion/any registered forecaster
         try:
             if self.volatility_model is None:
@@ -140,6 +159,11 @@ class EnsembleSignalEngine:
             probs = self.direction_model.predict_proba(features_df.iloc[[-1]])
             prob_up = float(probs[0, 1])
             model_id = f"{self.direction_model.model_id}:{self.direction_model.version}"
+
+        # WO-1: Apply calibrator when available — all downstream consumers
+        # (thresholds, confidence, expected_return) use the calibrated value.
+        if self.calibrator is not None and self.calibrator.is_fitted:
+            prob_up = float(self.calibrator.transform(np.array([prob_up]))[0])
 
         # 3. Expected forward volatility (model forecast or default).
         exp_vol = self.default_volatility
