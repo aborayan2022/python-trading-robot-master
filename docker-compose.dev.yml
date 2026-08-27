@@ -8,13 +8,23 @@ services:
     env_file: .env
     environment:
       - LOG_LEVEL=DEBUG
-      - TRADING_MODE=paper
+      - PYROBOT_MODE=paper
     volumes:
-      - .:/app
+      - ./pyrobot:/app/pyrobot
+      - ./tests:/app/tests
       - bot-data:/app/data
+    ports:
+      - "8080:8080"
     networks:
       - trading-net
     read_only: false
+    tmpfs:
+      - /tmp:size=100M
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
     command: >
       python -m pytest tests/ -v --tb=short -x
 

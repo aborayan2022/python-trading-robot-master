@@ -105,6 +105,14 @@ def evaluate_oos_economics(
     hist_data: List[dict] = []
     for i in range(n):
         row = prices.iloc[i]
+        # Handle MultiIndex (symbol, datetime) — extract the datetime part.
+        idx = prices.index[i]
+        if isinstance(idx, tuple):
+            dt_str = str(idx[1]) if len(idx) > 1 else str(i)
+        elif hasattr(idx, "isoformat"):
+            dt_str = str(idx)
+        else:
+            dt_str = str(i)
         hist_data.append({
             "symbol": "OOS_REPLAY",
             "open": float(row["open"]),
@@ -112,7 +120,7 @@ def evaluate_oos_economics(
             "low": float(row["low"]),
             "close": float(row["close"]),
             "volume": float(row["volume"]),
-            "datetime": str(prices.index[i]) if hasattr(prices.index[i], "isoformat") else str(i),
+            "datetime": dt_str,
         })
 
     # ── Wrap reconstructed signals in a strategy closure ──

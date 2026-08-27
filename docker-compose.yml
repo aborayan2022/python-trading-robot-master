@@ -46,6 +46,7 @@ services:
       target: test
     container_name: pyrobot-test
     profiles: ["test"]
+    env_file: .env
     networks:
       - trading-net
 

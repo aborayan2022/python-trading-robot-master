@@ -224,6 +224,19 @@ def train_direction_champion_candidate(
     fitted = model_factory()
     fitted.fit(clean, labels)
 
+    # WO-3: Fit calibrator on OOS probabilities, not in-sample.
+    # This ensures the max_calibration_error gate evaluates real generalization.
+    # Must be computed before shadow validation (WO-8) so the OOS calibrator
+    # is available for shadow ECE evaluation and calibrated shadow economics.
+    if len(result.oos_probabilities) > 0:
+        calibrator = IsotonicCalibrator().fit(result.oos_probabilities, result.oos_labels)
+        calibration_oos = calibrator.report(result.oos_probabilities, result.oos_labels)
+    else:
+        # Fallback: no OOS probabilities collected (proba_fn not provided or
+        # all folds empty).  Record NaN ECE so the gate rejects.
+        calibrator = None
+        calibration_oos = {"expected_calibration_error": float("nan"), "bins": []}
+
     # WO-5: Shadow validation — evaluate the refitted artifact on a holdout
     # excluded from the walk-forward, to detect overfitting or over-optimism.
     holdout_size = max(test_period_days, int(len(clean) * 0.10))
@@ -240,17 +253,28 @@ def train_direction_champion_candidate(
         shadow_preds = fitted.predict(holdout_data)
         shadow_accuracy = accuracy_metric(holdout_labels_raw, shadow_preds)
 
-        # ECE on holdout
+        # WO-8: ECE on holdout — use the OOS calibrator (trained on walk-forward
+        # OOS data) to evaluate calibration on the shadow holdout.  This measures
+        # whether calibration generalizes, NOT whether a new calibrator can fit
+        # (which would be circular — fit and eval on the same data).
         shadow_proba = fitted.predict_proba(holdout_data)[:, 1]
-        shadow_calibrator = IsotonicCalibrator().fit(shadow_proba, holdout_labels_raw)
-        shadow_ece_report = shadow_calibrator.report(shadow_proba, holdout_labels_raw)
+        if calibrator is not None and calibrator.is_fitted:
+            shadow_ece_report = calibrator.report(shadow_proba, holdout_labels_raw)
+        else:
+            shadow_ece_report = {"expected_calibration_error": float("nan"), "bins": []}
         shadow_ece = shadow_ece_report["expected_calibration_error"]
 
-        # Economics on holdout
+        # WO-8: Economics on holdout — apply the OOS calibrator to shadow
+        # probabilities so the economic evaluation reflects what the deployed
+        # engine would actually produce (calibrated thresholds).
+        shadow_proba_cal = shadow_proba
+        if calibrator is not None and calibrator.is_fitted:
+            shadow_proba_cal = calibrator.transform(shadow_proba)
+
         holdout_prices = aligned_prices.loc[holdout_data.index]
         try:
             shadow_econ = evaluate_oos_economics(
-                oos_probabilities=shadow_proba,
+                oos_probabilities=shadow_proba_cal,
                 aligned_prices=holdout_prices,
             )
         except Exception as exc:
@@ -265,20 +289,9 @@ def train_direction_champion_candidate(
             "shadow_n_trades": shadow_econ.n_trades,
         }
         logger.info(
-            "Shadow holdout: accuracy=%.4f, ECE=%.4f, net_pnl=%.2f",
+            "Shadow holdout: accuracy=%.4f, ECE=%.4f (OOS-calibrator), net_pnl=%.2f (calibrated)",
             shadow_accuracy, shadow_ece, shadow_econ.net_pnl_after_costs,
         )
-
-    # WO-3: Fit calibrator on OOS probabilities, not in-sample.
-    # This ensures the max_calibration_error gate evaluates real generalization.
-    if len(result.oos_probabilities) > 0:
-        calibrator = IsotonicCalibrator().fit(result.oos_probabilities, result.oos_labels)
-        calibration_oos = calibrator.report(result.oos_probabilities, result.oos_labels)
-    else:
-        # Fallback: no OOS probabilities collected (proba_fn not provided or
-        # all folds empty).  Record NaN ECE so the gate rejects.
-        calibrator = None
-        calibration_oos = {"expected_calibration_error": float("nan"), "bins": []}
 
     # Diagnostic: in-sample ECE (informational only, does NOT gate approval)
     insample_proba = fitted.predict_proba(clean)[:, 1]
@@ -286,11 +299,12 @@ def train_direction_champion_candidate(
     calibration_insample = insample_calibrator.report(insample_proba, labels)
 
     # WO-4: Replay OOS probabilities through the honest backtester.
-    if len(result.oos_probabilities) > 0:
+    if len(result.oos_probabilities) > 0 and len(result.oos_indices) > 0:
         try:
+            oos_prices = aligned_prices.iloc[result.oos_indices]
             oos_economics = evaluate_oos_economics(
                 oos_probabilities=result.oos_probabilities,
-                aligned_prices=aligned_prices.loc[clean.index],
+                aligned_prices=oos_prices,
             )
         except Exception as exc:
             logger.warning("Economic gate evaluation failed, using zeroed metrics: %s", exc)

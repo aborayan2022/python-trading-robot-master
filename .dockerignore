@@ -13,10 +13,18 @@ build/
 .ruff_cache
 .pytest_cache
 
+# Virtual environments
+.venv/
+venv/
+
 # Environment files
 .env
 .env.*
 !.env.example
+
+# Lock files (not used by pip)
+uv.lock
+poetry.lock
 
 # Samples
 samples/
@@ -32,12 +40,16 @@ LICENSE
 config/
 
 # Data (persistent volume)
-data/orders.json
+data/
 
 # IDE
 .vscode/
 .idea/
+.zcode/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Build artifacts
+setup.py

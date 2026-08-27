@@ -1,4 +1,4 @@
-# ── Stage 1: Builder ────────────────────────────────────────────────
+# ── Stage 1a: Runtime dependencies ───────────────────────────────
 FROM python:3.12-slim AS builder
 
 WORKDIR /build
@@ -9,9 +9,15 @@ RUN apt-get update && \
 
 COPY pyproject.toml ./
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir --prefix=/install ".[alpaca,schwab,console,dev]"
+    pip install --no-cache-dir --prefix=/install ".[alpaca,schwab,console,ml]"
 
-# ── Stage 2: Runtime / Console ────────────────────────────────────
+# ── Stage 1b: Test dependencies (extends runtime) ───────────────
+FROM builder AS test-builder
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir --prefix=/install ".[dev]"
+
+# ── Stage 2: Runtime / Console ──────────────────────────────────
 FROM python:3.12-slim AS runtime
 
 RUN groupadd -r trader && useradd -r -g trader -d /app -s /sbin/nologin trader
@@ -20,10 +26,9 @@ WORKDIR /app
 
 COPY --from=builder /install /usr/local
 COPY pyrobot/ ./pyrobot/
-COPY pyproject.toml ./
 
-RUN mkdir -p /app/data /app/logs /tmp && \
-    chown -R trader:trader /app /tmp
+RUN mkdir -p /app/data /app/logs && \
+    chown -R trader:trader /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -34,16 +39,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)" || exit 1
 
 USER trader
 
 # Launch the unified Management Console + background trading loop
 CMD ["python", "-m", "pyrobot.console"]
 
-# ── Stage 3: Test (includes tests) ────────────────────────────────
+# ── Stage 3: Test (includes tests + dev tools) ─────────────────
 FROM runtime AS test
 
+COPY --from=test-builder /install /usr/local
 COPY tests/ ./tests/
 
 USER root

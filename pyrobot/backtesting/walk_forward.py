@@ -129,6 +129,7 @@ class WalkForwardResult:
     oos_predictions: np.ndarray = field(default_factory=lambda: np.array([]))
     oos_labels: np.ndarray = field(default_factory=lambda: np.array([]))
     oos_probabilities: np.ndarray = field(default_factory=lambda: np.array([]))
+    oos_indices: List[int] = field(default_factory=list)
 
     def summary(self) -> dict:
         return {
@@ -213,6 +214,7 @@ def run_walk_forward(
 
         oos_preds.append(preds)
         oos_labels.append(labels.iloc[test_idx].to_numpy())
+        result.oos_indices.extend(test_idx.tolist())
 
         if proba_fn is not None:
             proba = np.asarray(proba_fn(model, df.iloc[test_idx]))
