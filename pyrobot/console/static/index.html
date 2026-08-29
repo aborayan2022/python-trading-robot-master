@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PyRobot Management Console — غرفة قيادة المدير</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="static/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
 </head>
+
 <body class="theme-dark">
   <div id="app">
     <!-- ── Top Navigation Bar ─────────────────────────────────────────────── -->
@@ -69,7 +73,7 @@
 
     <!-- ── Main Content Area ─────────────────────────────────────────────── -->
     <main class="main-container">
-      
+
       <!-- ── TAB 1: OVERVIEW ─────────────────────────────────────────────── -->
       <section class="tab-pane active" id="pane-overview">
         <!-- Top Metrics Cards Grid -->
@@ -176,7 +180,10 @@
                   </tr>
                 </thead>
                 <tbody id="positions-tbody">
-                  <tr><td colspan="6" class="text-center text-muted" data-i18n="no_open_positions">لا توجد مراكز مفتوحة حالياً</td></tr>
+                  <tr>
+                    <td colspan="6" class="text-center text-muted" data-i18n="no_open_positions">لا توجد مراكز مفتوحة
+                      حالياً</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -200,7 +207,9 @@
                   </tr>
                 </thead>
                 <tbody id="orders-tbody">
-                  <tr><td colspan="6" class="text-center text-muted" data-i18n="no_orders_yet">لا توجد أوامر بعد</td></tr>
+                  <tr>
+                    <td colspan="6" class="text-center text-muted" data-i18n="no_orders_yet">لا توجد أوامر بعد</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -214,7 +223,8 @@
           <span class="alert-icon">🔒</span>
           <div>
             <strong data-i18n="control_restricted_title">صلاحية المدير مطلوبة للتحكم</strong>
-            <p data-i18n="control_restricted_desc">أنت تتصفح حالياً بصفة مراقب. يلزم تسجيل الدخول بدور MANAGER لإجراء أي تعديلات أو تشغيل/إيقاف.</p>
+            <p data-i18n="control_restricted_desc">أنت تتصفح حالياً بصفة مراقب. يلزم تسجيل الدخول بدور MANAGER لإجراء أي
+              تعديلات أو تشغيل/إيقاف.</p>
           </div>
         </div>
 
@@ -244,7 +254,8 @@
           <!-- Emergency Kill Switch Box -->
           <div class="panel kill-switch-box">
             <div class="panel-header">
-              <h3 class="text-danger font-bold" data-i18n="ctrl_emergency_title">مفتاح الطوارئ (Emergency Kill Switch)</h3>
+              <h3 class="text-danger font-bold" data-i18n="ctrl_emergency_title">مفتاح الطوارئ (Emergency Kill Switch)
+              </h3>
               <span class="badge badge-danger" id="ctrl-kill-badge">INACTIVE</span>
             </div>
             <p class="text-muted text-sm" data-i18n="ctrl_kill_desc">
@@ -316,19 +327,23 @@
             <form id="limits-form" class="form-grid">
               <div class="form-group">
                 <label data-i18n="lbl_max_pos_pct">أقصى حجم للمركز الواحد (%)</label>
-                <input type="number" id="limit-max-pos" class="form-control font-mono" step="0.01" min="0.01" max="1.0" value="0.10">
+                <input type="number" id="limit-max-pos" class="form-control font-mono" step="0.01" min="0.01" max="1.0"
+                  value="0.10">
               </div>
               <div class="form-group">
                 <label data-i18n="lbl_max_dd_pct">الحد الأقصى للتراجع الكلي (%)</label>
-                <input type="number" id="limit-max-dd" class="form-control font-mono" step="0.01" min="0.01" max="0.50" value="0.15">
+                <input type="number" id="limit-max-dd" class="form-control font-mono" step="0.01" min="0.01" max="0.50"
+                  value="0.15">
               </div>
               <div class="form-group">
                 <label data-i18n="lbl_max_daily_loss">الحد الأقصى للخسارة اليومية (%)</label>
-                <input type="number" id="limit-daily-loss" class="form-control font-mono" step="0.01" min="0.01" max="0.20" value="0.03">
+                <input type="number" id="limit-daily-loss" class="form-control font-mono" step="0.01" min="0.01"
+                  max="0.20" value="0.03">
               </div>
               <div class="form-group">
                 <label data-i18n="lbl_stop_dist">المسافة الافتراضية لوقف الخسارة (%)</label>
-                <input type="number" id="limit-stop-dist" class="form-control font-mono" step="0.01" min="0.005" max="0.20" value="0.02">
+                <input type="number" id="limit-stop-dist" class="form-control font-mono" step="0.01" min="0.005"
+                  max="0.20" value="0.02">
               </div>
               <div class="form-actions">
                 <button type="submit" class="btn btn-primary" id="btn-save-limits">
@@ -343,7 +358,8 @@
             <div class="panel-header">
               <div class="gate-title-row">
                 <span class="gate-lock-icon">🔒</span>
-                <h3 class="text-warning font-bold" data-i18n="ctrl_live_gate_title">بوابة التداول الحي بأموال حقيقية (Multi-Step Gate)</h3>
+                <h3 class="text-warning font-bold" data-i18n="ctrl_live_gate_title">بوابة التداول الحي بأموال حقيقية
+                  (Multi-Step Gate)</h3>
               </div>
               <span class="badge badge-danger font-mono" id="live-gate-env-status">ENV LOCKED</span>
             </div>
@@ -351,17 +367,20 @@
               <div class="alert-box alert-danger">
                 <strong data-i18n="alert_live_warning_title">تنبيه أمان صارم:</strong>
                 <p data-i18n="alert_live_warning_text">
-                  التداول الحي بأموال حقيقية مقفل تلقائياً. لفتح هذه البوابة يلزم ضبط `PYROBOT_ALLOW_LIVE_TRADING=true` في خادم التشغيل، ثم إدخال العبارة التأكيدية الإلزامية وتأكيد الخطوة الثانية.
+                  التداول الحي بأموال حقيقية مقفل تلقائياً. لفتح هذه البوابة يلزم ضبط `PYROBOT_ALLOW_LIVE_TRADING=true`
+                  في خادم التشغيل، ثم إدخال العبارة التأكيدية الإلزامية وتأكيد الخطوة الثانية.
                 </p>
               </div>
               <form id="live-unlock-form" class="gate-form">
                 <div class="form-group">
                   <label data-i18n="lbl_confirmation_phrase">أدخل العبارة التأكيدية الحرفية:</label>
-                  <input type="text" id="live-phrase-input" class="form-control font-mono" placeholder="I UNDERSTAND THE RISKS OF LIVE TRADING">
+                  <input type="text" id="live-phrase-input" class="form-control font-mono"
+                    placeholder="I UNDERSTAND THE RISKS OF LIVE TRADING">
                 </div>
                 <div class="form-check">
                   <input type="checkbox" id="live-step-two-check">
-                  <label for="live-step-two-check" data-i18n="lbl_live_step_two">أؤكد تحمل المسؤولية الكاملة وامتثال كافة اختبارات الحساب الورقي أولاً.</label>
+                  <label for="live-step-two-check" data-i18n="lbl_live_step_two">أؤكد تحمل المسؤولية الكاملة وامتثال
+                    كافة اختبارات الحساب الورقي أولاً.</label>
                 </div>
                 <button type="submit" class="btn btn-danger font-bold" id="btn-live-unlock">
                   🔓 <span data-i18n="btn_unlock_live">فتح قفل التداول الحي (Unlock Live Profile)</span>
@@ -392,7 +411,8 @@
                 <option value="KILL_SWITCH_RESET">KILL_SWITCH_RESET</option>
                 <option value="MODEL_DRIFT_CHECK">MODEL_DRIFT_CHECK</option>
               </select>
-              <button class="btn btn-outline btn-sm" id="btn-refresh-audit">🔄 <span data-i18n="btn_refresh">تحديث</span></button>
+              <button class="btn btn-outline btn-sm" id="btn-refresh-audit">🔄 <span
+                  data-i18n="btn_refresh">تحديث</span></button>
             </div>
           </div>
           <div class="table-responsive">
@@ -408,7 +428,10 @@
                 </tr>
               </thead>
               <tbody id="audit-tbody">
-                <tr><td colspan="6" class="text-center text-muted" data-i18n="loading_audit">جاري تحميل سجل التدقيق...</td></tr>
+                <tr>
+                  <td colspan="6" class="text-center text-muted" data-i18n="loading_audit">جاري تحميل سجل التدقيق...
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -431,7 +454,8 @@
               <span class="badge badge-success font-mono">PHASE 1 ACTIVE</span>
             </div>
             <p class="market-desc">
-              الدعم المعتمد الحالي: تداول ورقي كامل (Paper Trading) مع استقبال الأشرطة الدقيقة وتغذية الأسعار، وتجهيز لفتح التداول الحي بعد استيفاء شروط بوابة الأمان.
+              الدعم المعتمد الحالي: تداول ورقي كامل (Paper Trading) مع استقبال الأشرطة الدقيقة وتغذية الأسعار، وتجهيز
+              لفتح التداول الحي بعد استيفاء شروط بوابة الأمان.
             </p>
             <div class="market-features">
               <span class="feat-pill">✔ Market & Limit Orders</span>
@@ -454,7 +478,8 @@
               <span class="badge badge-neutral font-mono">COMING SOON</span>
             </div>
             <p class="market-desc text-muted">
-              المرحلة القادمة: دعم التوصيل عبر TWS / IB Gateway للوصول للأسواق العالمية. الواجهة معطلة في هذه المرحلة لضمان الصدق البرمجي والاستقرار.
+              المرحلة القادمة: دعم التوصيل عبر TWS / IB Gateway للوصول للأسواق العالمية. الواجهة معطلة في هذه المرحلة
+              لضمان الصدق البرمجي والاستقرار.
             </p>
             <div class="market-features">
               <span class="feat-pill disabled">⏳ TWS Gateway</span>
@@ -498,7 +523,8 @@
         <form id="login-form">
           <div class="form-group">
             <label data-i18n="lbl_auth_token">رمز التوكن (Access Token):</label>
-            <input type="password" id="login-token-input" class="form-control font-mono" placeholder="manager-token" required>
+            <input type="password" id="login-token-input" class="form-control font-mono" placeholder="manager-token"
+              required>
           </div>
           <div class="quick-tokens-hint">
             <span class="text-muted text-xs">Default dev tokens:</span>
@@ -534,4 +560,5 @@
 
   <script src="/static/app.js"></script>
 </body>
+
 </html>
