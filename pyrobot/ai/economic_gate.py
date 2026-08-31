@@ -102,19 +102,27 @@ def evaluate_oos_economics(
         # else: no signal, position unchanged (flat)
 
     # ── Build historical data list for BacktestEngine ──
+    # Preserve each row's original symbol (from a MultiIndex when present) so the
+    # (symbol, datetime) keys stay unique. If every row were relabeled to a single
+    # "OOS_REPLAY" symbol, cross-sectional probability streams spanning many
+    # symbols (whose bars share trading days) would produce duplicate keys and
+    # crash the backtester with an ambiguous-series error.
     hist_data: List[dict] = []
     for i in range(n):
         row = prices.iloc[i]
-        # Handle MultiIndex (symbol, datetime) — extract the datetime part.
+        # Handle MultiIndex (symbol, datetime) — keep symbol, take datetime part.
         idx = prices.index[i]
         if isinstance(idx, tuple):
+            symbol_key = str(idx[0]) if len(idx) > 1 else "OOS_REPLAY"
             dt_str = str(idx[1]) if len(idx) > 1 else str(i)
         elif hasattr(idx, "isoformat"):
+            symbol_key = "OOS_REPLAY"
             dt_str = str(idx)
         else:
+            symbol_key = "OOS_REPLAY"
             dt_str = str(i)
         hist_data.append({
-            "symbol": "OOS_REPLAY",
+            "symbol": symbol_key,
             "open": float(row["open"]),
             "high": float(row["high"]),
             "low": float(row["low"]),

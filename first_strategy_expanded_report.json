@@ -1,0 +1,182 @@
+{
+  "approved_for_challenger": false,
+  "walk_forward": {
+    "n_folds": 4,
+    "fold_scores": [
+      0.522581,
+      0.485484,
+      0.525806,
+      0.532258
+    ],
+    "oos_score": 0.516532,
+    "n_oos_predictions": 2480
+  },
+  "baselines": {
+    "buy_and_hold": 0.569075502237456,
+    "sma": 0.511377701609064
+  },
+  "calibration_oos": {
+    "expected_calibration_error": 1.1426791412724646e-16,
+    "bins": [
+      {
+        "bin_start": 0.4,
+        "bin_end": 0.5,
+        "count": 147,
+        "avg_probability": 0.4829931972789114,
+        "empirical_rate": 0.48299319727891155
+      },
+      {
+        "bin_start": 0.5,
+        "bin_end": 0.6000000000000001,
+        "count": 2332,
+        "avg_probability": 0.5621783876500857,
+        "empirical_rate": 0.5621783876500858
+      },
+      {
+        "bin_start": 0.9,
+        "bin_end": 1.0,
+        "count": 1,
+        "avg_probability": 1.0,
+        "empirical_rate": 1.0
+      }
+    ]
+  },
+  "calibration_insample_diagnostic": {
+    "expected_calibration_error": 3.0252863910094237e-17,
+    "bins": [
+      {
+        "bin_start": 0.1,
+        "bin_end": 0.2,
+        "count": 6,
+        "avg_probability": 0.16666666666666666,
+        "empirical_rate": 0.16666666666666666
+      },
+      {
+        "bin_start": 0.30000000000000004,
+        "bin_end": 0.4,
+        "count": 13,
+        "avg_probability": 0.3076923076923076,
+        "empirical_rate": 0.3076923076923077
+      },
+      {
+        "bin_start": 0.4,
+        "bin_end": 0.5,
+        "count": 754,
+        "avg_probability": 0.49867374005305015,
+        "empirical_rate": 0.4986737400530504
+      },
+      {
+        "bin_start": 0.5,
+        "bin_end": 0.6000000000000001,
+        "count": 8553,
+        "avg_probability": 0.5617911843797498,
+        "empirical_rate": 0.5617911843797498
+      },
+      {
+        "bin_start": 0.6000000000000001,
+        "bin_end": 0.7000000000000001,
+        "count": 1005,
+        "avg_probability": 0.6517412935323385,
+        "empirical_rate": 0.6517412935323383
+      },
+      {
+        "bin_start": 0.7000000000000001,
+        "bin_end": 0.8,
+        "count": 168,
+        "avg_probability": 0.7857142857142859,
+        "empirical_rate": 0.7857142857142857
+      },
+      {
+        "bin_start": 0.9,
+        "bin_end": 1.0,
+        "count": 4,
+        "avg_probability": 1.0,
+        "empirical_rate": 1.0
+      }
+    ]
+  },
+  "model": {
+    "model_id": "us_direction_v2",
+    "version": "v2.0",
+    "model_type": "logistic_direction",
+    "target_variable": "dir_5",
+    "features": [
+      "rsi_14",
+      "rsi_28",
+      "sma_ratio_10",
+      "sma_ratio_20",
+      "sma_ratio_50",
+      "sma_ratio_200",
+      "ema_ratio_9",
+      "ema_ratio_21",
+      "bb_upper_ratio",
+      "bb_lower_ratio",
+      "bb_bandwidth",
+      "bb_percent_b",
+      "macd",
+      "macd_signal",
+      "macd_hist",
+      "atr_pct_14",
+      "atr_pct_30",
+      "realized_vol_10",
+      "realized_vol_20",
+      "realized_vol_60",
+      "parkinson_vol_20",
+      "garman_klass_vol_20",
+      "hl_range_pct",
+      "return_1",
+      "log_return_1",
+      "return_3",
+      "log_return_3",
+      "return_5",
+      "log_return_5",
+      "return_10",
+      "log_return_10",
+      "return_20",
+      "log_return_20",
+      "vol_ratio_5",
+      "vol_ratio_20",
+      "return_acceleration_5_20",
+      "vwap_deviation",
+      "trend_strength",
+      "vol_percentile",
+      "regime_code",
+      "regime_confidence"
+    ],
+    "training_start": "2021-08-30 04:00:00+00:00",
+    "training_end": "2026-08-28 04:00:00+00:00",
+    "status": "CANDIDATE",
+    "oos_metrics": {
+      "oos_accuracy": 0.5165322580645161,
+      "buy_hold_accuracy": 0.569075502237456,
+      "sma_accuracy": 0.511377701609064,
+      "expected_calibration_error": 1.1426791412724646e-16,
+      "expected_calibration_error_insample": 3.0252863910094237e-17,
+      "oos_samples": 2480.0,
+      "net_pnl_after_costs": 195394.73276289064,
+      "sharpe": 0.6439654538583348,
+      "max_drawdown": -0.22957427636068456,
+      "profit_factor": 10.159328553034726,
+      "n_trades": 43,
+      "ev_per_trade": 4544.063552625364,
+      "shadow_accuracy": 0.559047619047619,
+      "shadow_ece": 0.013855606758832573,
+      "shadow_net_pnl": 0.0,
+      "shadow_sharpe": 0.0,
+      "shadow_n_trades": 0
+    },
+    "hyperparameters": {
+      "horizon": 5,
+      "threshold": 0.0
+    },
+    "created_at": "2026-08-30T20:17:57.453849+00:00",
+    "approved_by": null,
+    "approved_at": null,
+    "description": "Artifact refit on all training data after walk-forward; OOS metrics estimate fold behavior, shadow metrics measure the deployed artifact on untouched data.",
+    "artifact_path": "first_strategy_models/us_direction_v2_v2.0.npz",
+    "artifact_sha256": "fa15af5e4f12662888c4edb7db1c16e475efa4b994fb50e681b46b2990875878",
+    "calibration_path": "first_strategy_models/us_direction_v2_v2.0.calib.npz",
+    "calibration_sha256": "448e64d6d9084982923e4703cbc33c00c3a5ff6d3d03e45eb35dc0ae692ab0b3",
+    "n_trials": 1
+  }
+}

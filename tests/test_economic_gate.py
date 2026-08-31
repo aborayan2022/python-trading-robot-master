@@ -172,6 +172,60 @@ class TestWO4EconomicGate:
         gate = TrainingGateConfig()
         assert metrics.n_trades < gate.min_oos_trades
 
+    def test_cross_sectional_multiindex_stream_does_not_crash(self):
+        """A probability stream spanning multiple symbols must replay cleanly.
+
+        Cross-sectional training (multiple symbols sharing trading days) feeds
+        `evaluate_oos_economics` an `aligned_prices` frame with a (symbol,
+        datetime) MultiIndex. Before the fix, relabeling every row to a single
+        "OOS_REPLAY" symbol produced duplicate (symbol, datetime) keys, which
+        crashed the backtester with an ambiguous-series error. This test only
+        requires that a high-confidence cross-sectional stream runs to
+        completion and produces trades.
+        """
+        n = 60
+        base_idx = pd.date_range("2026-01-01", periods=n, freq="D")
+        frames = []
+        probs = []
+        for sym in ["AAA", "BBB", "CCC"]:
+            # Alternating trending path per symbol so entries are rewarded.
+            close = np.concatenate([
+                np.linspace(100, 120, n // 2),
+                np.linspace(120, 100, n // 2),
+            ])
+            mi = pd.MultiIndex.from_arrays(
+                [[sym] * n, base_idx], names=["symbol", "datetime"]
+            )
+            prices = pd.DataFrame(
+                {
+                    "open": close,
+                    "high": close + 0.5,
+                    "low": close - 0.5,
+                    "close": close,
+                    "volume": np.full(n, 1_000_000.0),
+                },
+                index=mi,
+            )
+            frames.append(prices)
+            # High-confidence BUY in the first half, high-confidence SELL in the
+            # second half — produces entries AND exits so round trips complete.
+            probs.extend([0.95] * (n // 2))
+            probs.extend([0.05] * (n // 2))
+
+        aligned_prices = pd.concat(frames).sort_index()
+        oos_probabilities = np.asarray(probs, dtype=float)
+
+        metrics = evaluate_oos_economics(
+            oos_probabilities=oos_probabilities,
+            aligned_prices=aligned_prices,
+        )
+
+        # The drivers: the call above must NOT raise, and it must produce trades.
+        assert metrics.n_trades > 0, (
+            f"Expected trades from a cross-sectional stream, got {metrics.n_trades}"
+        )
+        assert metrics.net_pnl_after_costs > 0
+
     def test_profitable_model_passes_all_gates(self, tmp_path):
         """Consistent edge, enough trades, positive economics → approved."""
         rng = np.random.default_rng(400)
