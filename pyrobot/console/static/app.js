@@ -237,6 +237,16 @@
     liveStepTwoCheck: document.getElementById('live-step-two-check'),
     liveGateEnvStatus: document.getElementById('live-gate-env-status'),
     
+    // Theme & Branding
+    themeForm: document.getElementById('theme-form'),
+    themePlatformName: document.getElementById('theme-platform-name'),
+    themePlatformSubtitle: document.getElementById('theme-platform-subtitle'),
+    themeLogoUrl: document.getElementById('theme-logo-url'),
+    themePrimaryColor: document.getElementById('theme-primary-color'),
+    themeAccentColor: document.getElementById('theme-accent-color'),
+    themeBgPrimary: document.getElementById('theme-bg-primary'),
+    btnResetTheme: document.getElementById('btn-reset-theme'),
+    
     // Audit
     auditTbody: document.getElementById('audit-tbody'),
     auditActionFilter: document.getElementById('audit-action-filter'),
@@ -887,11 +897,89 @@
       }
     });
 
+    // Theme form submit
+    if (dom.themeForm) {
+      dom.themeForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+          branding: {
+            platform_name: dom.themePlatformName.value,
+            platform_subtitle: dom.themePlatformSubtitle.value,
+            logo_url: dom.themeLogoUrl.value,
+          },
+          theme: {
+            primary_color: dom.themePrimaryColor.value,
+            accent_color: dom.themeAccentColor.value,
+            bg_primary: dom.themeBgPrimary.value,
+          },
+        };
+        const res = await apiFetch('/api/settings/theme', {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          showToast('Theme saved and applied', 'success');
+          await loadAndApplyTheme();
+        }
+      });
+    }
+
+    // Theme reset button
+    if (dom.btnResetTheme) {
+      dom.btnResetTheme.addEventListener('click', async () => {
+        const res = await apiFetch('/api/settings/theme/reset', { method: 'POST' });
+        if (res.ok) {
+          showToast('Theme reset to defaults', 'info');
+          await loadAndApplyTheme();
+        }
+      });
+    }
+
     // Audit refresh & filter
     if (dom.btnRefreshAudit) dom.btnRefreshAudit.addEventListener('click', loadAuditLogs);
     if (dom.auditActionFilter) dom.auditActionFilter.addEventListener('change', loadAuditLogs);
 
     window.addEventListener('resize', renderEquityChart);
+  }
+
+  // ── Theme & Branding ─────────────────────────────────────────────────────
+  async function loadAndApplyTheme() {
+    try {
+      const res = await apiFetch('/api/settings/theme');
+      if (!res.ok) return;
+      const data = await res.json();
+      const root = document.documentElement;
+      const theme = data.theme || {};
+      const branding = data.branding || {};
+      // Apply theme CSS custom properties
+      if (theme.primary_color) root.style.setProperty('--accent-blue', theme.primary_color);
+      if (theme.accent_color) root.style.setProperty('--accent-cyan', theme.accent_color);
+      if (theme.success_color) root.style.setProperty('--success', theme.success_color);
+      if (theme.warning_color) root.style.setProperty('--warning', theme.warning_color);
+      if (theme.danger_color) root.style.setProperty('--danger', theme.danger_color);
+      if (theme.bg_primary) root.style.setProperty('--bg-primary', theme.bg_primary);
+      if (theme.bg_secondary) root.style.setProperty('--bg-secondary', theme.bg_secondary);
+      if (theme.text_primary) root.style.setProperty('--text-primary', theme.text_primary);
+      if (theme.text_secondary) root.style.setProperty('--text-secondary', theme.text_secondary);
+      // Apply branding
+      if (branding.platform_name) {
+        const brandTitle = document.querySelector('.brand-title');
+        if (brandTitle) brandTitle.textContent = branding.platform_name;
+        document.title = branding.platform_name + ' — ' + (branding.platform_subtitle || 'Management Console');
+      }
+      if (branding.platform_subtitle) {
+        const brandSub = document.querySelector('.brand-sub');
+        if (brandSub) brandSub.textContent = branding.platform_subtitle;
+      }
+      if (branding.logo_url) {
+        const logoImg = document.createElement('img');
+        logoImg.src = branding.logo_url;
+        logoImg.alt = branding.platform_name || 'Logo';
+        logoImg.style.cssText = 'height:22px;width:22px;object-fit:contain;border-radius:4px;';
+        const logoBadge = document.querySelector('.logo-badge');
+        if (logoBadge) { logoBadge.innerHTML = ''; logoBadge.appendChild(logoImg); }
+      }
+    } catch (_e) { /* Settings API unavailable — use defaults */ }
   }
 
   // ── Application Initialization ────────────────────────────────────────────
@@ -900,6 +988,7 @@
     initTabs();
     initEventListeners();
     await checkAuth();
+    await loadAndApplyTheme();
     initSSE();
   }
 

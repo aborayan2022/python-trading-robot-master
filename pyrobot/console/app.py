@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from pyrobot.console.api import create_api_router
+from pyrobot.console.settings import DEFAULT_SETTINGS_PATH, SettingsManager
 from pyrobot.console.supervisor import ConsoleConfig, RuntimeSupervisor
 from pyrobot.logging_config import get_logger
 
@@ -19,8 +20,14 @@ logger = get_logger("console_app")
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def create_app(supervisor: Optional[RuntimeSupervisor] = None) -> FastAPI:
-    """Build and configure the FastAPI web console application."""
+def create_app(supervisor: Optional[RuntimeSupervisor] = None, settings_path: Optional[str | Path] = None) -> FastAPI:
+    """Build and configure the FastAPI web console application.
+
+    Args:
+        supervisor: Active runtime supervisor (created fresh if omitted).
+        settings_path: Optional path for the settings store; defaults to
+            data/console_settings.json. Injectable so callers/tests can isolate.
+    """
     active_supervisor = supervisor or RuntimeSupervisor()
 
     app = FastAPI(
@@ -42,7 +49,8 @@ def create_app(supervisor: Optional[RuntimeSupervisor] = None) -> FastAPI:
         return response
 
     # Mount API routes
-    api_router = create_api_router(active_supervisor)
+    settings_manager = SettingsManager(settings_path if settings_path is not None else DEFAULT_SETTINGS_PATH)
+    api_router = create_api_router(active_supervisor, settings_manager=settings_manager)
     app.include_router(api_router)
 
     # Mount static assets directory

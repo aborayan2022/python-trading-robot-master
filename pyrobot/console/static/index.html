@@ -388,6 +388,44 @@
               </form>
             </div>
           </div>
+
+          <!-- Theme & Branding Settings (Manager Only) -->
+          <div class="panel theme-settings-box">
+            <div class="panel-header">
+              <h3>🎨 Theme & Branding</h3>
+              <span class="badge badge-neutral">Manager Only</span>
+            </div>
+            <form id="theme-form" class="form-grid">
+              <div class="form-group">
+                <label>Platform Name</label>
+                <input type="text" id="theme-platform-name" class="form-control" value="PyRobot">
+              </div>
+              <div class="form-group">
+                <label>Subtitle</label>
+                <input type="text" id="theme-platform-subtitle" class="form-control" value="Management Console">
+              </div>
+              <div class="form-group">
+                <label>Logo URL</label>
+                <input type="text" id="theme-logo-url" class="form-control font-mono" placeholder="https://...">
+              </div>
+              <div class="form-group">
+                <label>Primary Color</label>
+                <input type="color" id="theme-primary-color" class="form-control" value="#3b82f6">
+              </div>
+              <div class="form-group">
+                <label>Accent Color</label>
+                <input type="color" id="theme-accent-color" class="form-control" value="#06b6d4">
+              </div>
+              <div class="form-group">
+                <label>Background Primary</label>
+                <input type="color" id="theme-bg-primary" class="form-control" value="#0a0e17">
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="btn-save-theme">💾 Save Theme</button>
+                <button type="button" class="btn btn-outline" id="btn-reset-theme">🔄 Reset Defaults</button>
+              </div>
+            </form>
+          </div>
         </div>
       </section>
 

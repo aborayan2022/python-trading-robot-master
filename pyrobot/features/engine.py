@@ -5,6 +5,7 @@ from typing import List, Optional
 import pandas as pd
 
 from pyrobot.features.base import BaseFeatureExtractor
+from pyrobot.features.enhanced import EnhancedFeatures
 from pyrobot.features.momentum import MomentumFeatures
 from pyrobot.features.regime import MarketRegimeDetector
 from pyrobot.features.technical import TechnicalFeatures
@@ -24,6 +25,7 @@ class FeatureEngine:
                 VolatilityFeatures(),
                 MomentumFeatures(),
                 MarketRegimeDetector(),
+                EnhancedFeatures(),
             ]
         else:
             self.extractors = extractors

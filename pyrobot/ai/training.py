@@ -100,11 +100,57 @@ class OptionalLightGBMDirectionModel(LogisticDirectionModel):
         return cast(np.ndarray, np.asarray(self._model.predict_proba(X[self.feature_names].fillna(0.0))))
 
     def save(self, path: str | Path) -> None:
-        raise RuntimeError("LightGBM artifact persistence requires joblib and is not enabled by default")
+        """Persist a fitted LightGBM model as a single self-contained joblib artifact.
+
+        The fitted LGBMClassifier and its metadata (model_id, version, params,
+        feature_names) are stored together in one pickle payload. Keeping them
+        in a single file means ModelRegistry's SHA-256 covers every field of
+        the artifact, so load() cannot be handed tampered or mismatched
+        metadata. An informative .meta.json sidecar is also written for
+        human inspection, but it is NOT authoritative for reloading.
+        """
+        if self._model is None or not self.is_fitted:
+            raise RuntimeError("Model must be fitted before save()")
+        try:
+            import joblib  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise ImportError("Install joblib to persist LightGBM models: pip install joblib") from exc
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        import json as _json
+        meta = {
+            "model_type": self.model_type,
+            "model_id": self.model_id,
+            "version": self.version,
+            "params": self.params,
+            "feature_names": self.feature_names,
+        }
+        payload = {
+            "model": self._model,
+            "meta": meta,
+        }
+        joblib.dump(payload, str(path))
+        path.with_suffix(".meta.json").write_text(
+            _json.dumps(meta, indent=2), encoding="utf-8"
+        )
 
     @classmethod
     def load(cls, path: str | Path) -> "OptionalLightGBMDirectionModel":
-        raise RuntimeError("LightGBM artifact loading is not enabled by default")
+        """Restore a fitted LightGBM model from a self-contained joblib artifact."""
+        try:
+            import joblib  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise ImportError("Install joblib to load LightGBM models: pip install joblib") from exc
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"LightGBM artifact not found: {path}")
+        payload = joblib.load(str(path))
+        meta = payload["meta"]
+        instance = cls(model_id=meta["model_id"], version=meta["version"], **meta.get("params", {}))
+        instance._model = payload["model"]
+        instance.feature_names = list(meta.get("feature_names", []))
+        instance.is_fitted = True
+        return instance
 
 
 def build_training_frame(

@@ -38,11 +38,12 @@ def test_supervisor(tmp_path) -> RuntimeSupervisor:
 
 
 @pytest.fixture
-def client(test_supervisor: RuntimeSupervisor) -> TestClient:
+def client(test_supervisor: RuntimeSupervisor, tmp_path) -> TestClient:
     """Fixture providing a TestClient configured with test tokens."""
     tokens_env = "manager:test-manager-token,dev:test-dev-token,viewer:test-viewer-token"
+    settings_path = str(tmp_path / "console_settings.json")
     with patch.dict(os.environ, {"PYROBOT_CONSOLE_TOKENS": tokens_env}):
-        app = create_app(test_supervisor)
+        app = create_app(test_supervisor, settings_path=settings_path)
         with TestClient(app) as test_client:
             yield test_client
 
@@ -356,3 +357,79 @@ class TestAuditTrailAndTelemetry:
         payload = json.loads(payload_str)
         assert "equity" in payload
         assert "state" in payload
+
+
+# ── Console Settings / Theme API ──────────────────────────────────────────────
+
+
+class TestConsoleSettingsTheme:
+    """Theme/branding settings endpoints: RBAC, validation, persistence, reset."""
+
+    def test_get_theme_requires_manager(self, client):
+        assert client.get("/api/settings/theme").status_code == 401
+        assert client.get("/api/settings/theme", headers=auth_headers("test-viewer-token")).status_code == 403
+        assert client.get("/api/settings/theme", headers=auth_headers("test-dev-token")).status_code == 403
+
+    def test_get_theme_returns_defaults(self, client):
+        res = client.get("/api/settings/theme", headers=auth_headers("test-manager-token"))
+        assert res.status_code == 200
+        data = res.json()
+        assert data["theme"]["primary_color"] == "#3b82f6"
+        assert data["branding"]["platform_name"] == "PyRobot"
+
+    def test_put_theme_persists_valid_partial_update(self, client):
+        headers = auth_headers("test-manager-token")
+        payload = {"theme": {"primary_color": "#ff0000"}, "branding": {"platform_name": "Custom"}}
+        res = client.put("/api/settings/theme", json=payload, headers=headers)
+        assert res.status_code == 200
+        assert res.json()["settings"]["theme"]["primary_color"] == "#ff0000"
+        assert res.json()["settings"]["branding"]["platform_name"] == "Custom"
+        # Unchanged fields must survive the merge
+        assert "accent_color" in res.json()["settings"]["theme"]
+
+        # Persistence check: a fresh GET reflects the change
+        get_res = client.get("/api/settings/theme", headers=headers)
+        assert get_res.json()["theme"]["primary_color"] == "#ff0000"
+
+    def test_put_theme_empty_body_rejected(self, client):
+        res = client.put("/api/settings/theme", json={}, headers=auth_headers("test-manager-token"))
+        assert res.status_code == 400
+
+    def test_post_theme_reset_restores_defaults(self, client):
+        headers = auth_headers("test-manager-token")
+        client.put("/api/settings/theme", json={"theme": {"primary_color": "#00ff00"}}, headers=headers)
+        res = client.post("/api/settings/theme/reset", headers=headers)
+        assert res.status_code == 200
+        assert res.json()["settings"]["theme"]["primary_color"] == "#3b82f6"
+
+    def test_put_theme_rejects_non_manager(self, client):
+        assert client.put("/api/settings/theme", json={"theme": {}}, headers=auth_headers("test-dev-token")).status_code == 403
+        assert client.post("/api/settings/theme/reset", headers=auth_headers("test-viewer-token")).status_code == 403
+
+    def test_put_theme_rejects_invalid_hex(self, client):
+        headers = auth_headers("test-manager-token")
+        res = client.put("/api/settings/theme", json={"theme": {"primary_color": "red"}}, headers=headers)
+        assert res.status_code == 422
+        res = client.put("/api/settings/theme", json={"theme": {"primary_color": "#12"}}, headers=headers)
+        assert res.status_code == 422
+
+    def test_put_theme_rejects_unknown_key(self, client):
+        headers = auth_headers("test-manager-token")
+        res = client.put("/api/settings/theme", json={"theme": {"not_a_real_color": "#ff0000"}}, headers=headers)
+        assert res.status_code == 422
+
+    def test_put_theme_rejects_unsafe_logo_url(self, client):
+        headers = auth_headers("test-manager-token")
+        bad = "javascript:alert(1)"
+        res = client.put("/api/settings/theme", json={"branding": {"logo_url": bad}}, headers=headers)
+        assert res.status_code == 422
+        bad_data = "data:image/png;base64,AAAA"
+        res = client.put("/api/settings/theme", json={"branding": {"logo_url": bad_data}}, headers=headers)
+        assert res.status_code == 422
+
+    def test_put_theme_accepts_safe_logo_url(self, client):
+        headers = auth_headers("test-manager-token")
+        for url in ("https://example.com/logo.png", "/static/logo.png"):
+            res = client.put("/api/settings/theme", json={"branding": {"logo_url": url}}, headers=headers)
+            assert res.status_code == 200, url
+            assert res.json()["settings"]["branding"]["logo_url"] == url

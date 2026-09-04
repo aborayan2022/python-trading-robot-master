@@ -121,6 +121,9 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# Runtime console/preferences artifacts
+data/console_settings.json
+
 # mypy
 .mypy_cache/
 .dmypy.json

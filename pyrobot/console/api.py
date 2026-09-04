@@ -20,7 +20,9 @@ from pyrobot.console.auth import (
     sign_session,
     validate_live_unlock,
 )
+from pyrobot.console.settings import SettingsManager
 from pyrobot.console.supervisor import ConsoleConfig, RuntimeSupervisor
+from pyrobot.console.validation import ThemeUpdateRequest
 from pyrobot.logging_config import get_logger
 from pyrobot.risk.kill_switch import KillSwitchReason
 
@@ -59,9 +61,10 @@ class LiveUnlockRequest(BaseModel):
     second_confirmation: bool = False
 
 
-def create_api_router(supervisor: RuntimeSupervisor) -> APIRouter:
+def create_api_router(supervisor: RuntimeSupervisor, settings_manager: Optional[SettingsManager] = None) -> APIRouter:
     """Factory creating configured API router wired to the active RuntimeSupervisor."""
     router = APIRouter(prefix="/api")
+    _settings = settings_manager or SettingsManager()
 
     # ── Authentication ────────────────────────────────────────────────────────
 
@@ -321,5 +324,34 @@ def create_api_router(supervisor: RuntimeSupervisor) -> APIRouter:
             )
         supervisor.config.allow_live_trading = True
         return {"status": "ok", "message": msg}
+
+    # ── Settings & Theme (MANAGER only) ───────────────────────────────────────
+
+    @router.get("/settings/theme")
+    def get_theme(_role: ConsoleRole = Depends(require_role(ConsoleRole.MANAGER))) -> Dict[str, Any]:
+        return _settings.get().to_dict()
+
+    @router.put("/settings/theme")
+    def update_theme(
+        payload: ThemeUpdateRequest,
+        _role: ConsoleRole = Depends(require_role(ConsoleRole.MANAGER)),
+    ) -> Dict[str, Any]:
+        update_data: Dict[str, Any] = {}
+        if payload.theme is not None:
+            update_data["theme"] = payload.theme.model_dump(exclude_none=True)
+        if payload.branding is not None:
+            update_data["branding"] = payload.branding.model_dump(exclude_none=True)
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No theme or branding data provided",
+            )
+        updated = _settings.update(update_data)
+        return {"status": "ok", "settings": updated.to_dict()}
+
+    @router.post("/settings/theme/reset")
+    def reset_theme(_role: ConsoleRole = Depends(require_role(ConsoleRole.MANAGER))) -> Dict[str, Any]:
+        updated = _settings.reset()
+        return {"status": "ok", "settings": updated.to_dict()}
 
     return router

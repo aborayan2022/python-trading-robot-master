@@ -668,3 +668,143 @@ class TestWO1CalibratorPersistence:
         )
         sig_cal = engine_cal.generate_signal("TEST", features)
         assert sig_cal.action == SignalAction.NO_TRADE
+
+
+class TestOptionalLightGBMDirectionModel:
+    """Tests for LightGBM model persistence and integration."""
+
+    def test_lightgbm_save_load_round_trip(self, tmp_path) -> None:
+        """LightGBM model must survive save→load with identical predictions."""
+        lightgbm = pytest.importorskip("lightgbm")
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        rng = np.random.default_rng(42)
+        X = pd.DataFrame({"a": rng.normal(size=100), "b": rng.normal(size=100)})
+        y = pd.Series((X["a"] + 0.5 * X["b"] > 0).astype(int))
+        model = OptionalLightGBMDirectionModel(model_id="lgbm_rt", version="v1").fit(X, y)
+        path = tmp_path / "lgbm_model.joblib"
+        model.save(path)
+
+        restored = OptionalLightGBMDirectionModel.load(path)
+        assert restored.model_id == "lgbm_rt"
+        assert restored.is_fitted
+        np.testing.assert_allclose(
+            restored.predict_proba(X), model.predict_proba(X), atol=1e-10
+        )
+
+    def test_lightgbm_model_type_registered(self) -> None:
+        """LightGBM model_type must be resolvable via model_class_for_type."""
+        from pyrobot.ai.models import model_class_for_type
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        cls = model_class_for_type("lightgbm_direction")
+        assert cls is OptionalLightGBMDirectionModel
+
+    def test_lightgbm_predict_proba_shape(self) -> None:
+        """LightGBM predict_proba must return [n_samples, 2] with P(down), P(up)."""
+        lightgbm = pytest.importorskip("lightgbm")
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        rng = np.random.default_rng(99)
+        X = pd.DataFrame({"x1": rng.normal(size=80), "x2": rng.normal(size=80)})
+        y = pd.Series((X["x1"] > 0).astype(int))
+        model = OptionalLightGBMDirectionModel(model_id="shape_test").fit(X, y)
+        proba = model.predict_proba(X)
+        assert proba.shape == (80, 2)
+        assert np.all(proba >= 0) and np.all(proba <= 1)
+        np.testing.assert_allclose(proba.sum(axis=1), 1.0, atol=1e-10)
+
+    def test_lightgbm_save_unfitted_raises(self, tmp_path) -> None:
+        """Saving an unfitted LightGBM model must raise RuntimeError."""
+        lightgbm = pytest.importorskip("lightgbm")
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        model = OptionalLightGBMDirectionModel(model_id="unfitted")
+        with pytest.raises(RuntimeError, match="fitted"):
+            model.save(tmp_path / "bad.joblib")
+
+    def test_lightgbm_load_missing_file(self, tmp_path) -> None:
+        """Loading from a nonexistent path must raise FileNotFoundError."""
+        lightgbm = pytest.importorskip("lightgbm")
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        with pytest.raises(FileNotFoundError):
+            OptionalLightGBMDirectionModel.load(tmp_path / "nonexistent.joblib")
+
+    def test_lightgbm_registry_round_trip(self, tmp_path) -> None:
+        """LightGBM model must be registerable and loadable via ModelRegistry."""
+        lightgbm = pytest.importorskip("lightgbm")
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        rng = np.random.default_rng(77)
+        X = pd.DataFrame({"f1": rng.normal(size=100), "f2": rng.normal(size=100)})
+        y = pd.Series((X["f1"] > 0).astype(int))
+        model = OptionalLightGBMDirectionModel(model_id="lgbm_reg", version="v1").fit(X, y)
+
+        registry = ModelRegistry(registry_dir=tmp_path)
+        meta = ModelMetadata(
+            model_id="lgbm_reg",
+            version="v1",
+            model_type="lightgbm_direction",
+            target_variable="dir_5",
+            features=["f1", "f2"],
+            training_start="2026-01-01",
+            training_end="2026-08-30",
+        )
+        registry.register_model(meta, model=model)
+        loaded = registry.load_model("lgbm_reg", "v1")
+        assert loaded.model_id == "lgbm_reg"
+        assert loaded.is_fitted
+        np.testing.assert_allclose(
+            loaded.predict_proba(X), model.predict_proba(X), atol=1e-10
+        )
+
+    def test_lightgbm_registry_tamper_detected(self, tmp_path) -> None:
+        """A corrupted LightGBM artifact must fail ModelRegistry's SHA-256 check."""
+        lightgbm = pytest.importorskip("lightgbm")
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        rng = np.random.default_rng(12)
+        X = pd.DataFrame({"f1": rng.normal(size=100), "f2": rng.normal(size=100)})
+        y = pd.Series((X["f1"] > 0).astype(int))
+        model = OptionalLightGBMDirectionModel(model_id="lgbm_tamper").fit(X, y)
+
+        registry = ModelRegistry(registry_dir=tmp_path)
+        meta = ModelMetadata(
+            model_id="lgbm_tamper",
+            version="v1",
+            model_type="lightgbm_direction",
+            target_variable="dir_5",
+            features=["f1", "f2"],
+            training_start="2026-01-01",
+            training_end="2026-08-30",
+        )
+        registry.register_model(meta, model=model)
+        artifact = next(tmp_path.glob("lgbm_tamper*.npz"))
+        # Corrupt a byte in the middle of the authoritative artifact
+        raw = bytearray(artifact.read_bytes())
+        raw[len(raw) // 2] ^= 0xFF
+        artifact.write_bytes(bytes(raw))
+        with pytest.raises(ArtifactIntegrityError, match="checksum mismatch"):
+            registry.load_model("lgbm_tamper", "v1")
+
+    def test_lightgbm_self_contained_metadata(self, tmp_path) -> None:
+        """A direct save/load must not depend on a UI-readable sidecar file."""
+        lightgbm = pytest.importorskip("lightgbm")
+        from pyrobot.ai.training import OptionalLightGBMDirectionModel
+
+        rng = np.random.default_rng(5)
+        X = pd.DataFrame({"a": rng.normal(size=80), "b": rng.normal(size=80)})
+        y = pd.Series((0.3 * X["a"] - 0.2 * X["b"] > 0).astype(int))
+        model = OptionalLightGBMDirectionModel(model_id="sc", version="v2", n_estimators=50).fit(X, y)
+        path = tmp_path / "model.npz"
+        model.save(path)
+
+        # Remove the informative sidecar — reloading must still fully work.
+        path.with_suffix(".meta.json").unlink()
+        restored = OptionalLightGBMDirectionModel.load(path)
+        assert restored.params["n_estimators"] == 50
+        assert restored.feature_names == ["a", "b"]
+        np.testing.assert_allclose(
+            restored.predict_proba(X), model.predict_proba(X), atol=1e-10
+        )

@@ -924,6 +924,25 @@ body {
   background: var(--border-color);
 }
 
+/* ── Theme Settings Panel ────────────────────────────────────────────────── */
+.theme-settings-box {
+  border: 1px solid var(--border-color);
+}
+.theme-settings-box .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+.theme-settings-box input[type="color"] {
+  width: 100%;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  cursor: pointer;
+}
+
 /* ── Toast Notifications ─────────────────────────────────────────────────── */
 
 .toast-container {

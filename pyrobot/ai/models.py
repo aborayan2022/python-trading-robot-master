@@ -253,15 +253,25 @@ class VolatilityForecaster(BaseQuantModel):
         return model
 
 
+def _lazy_import_lightgbm():
+    """Lazy import for OptionalLightGBMDirectionModel to avoid hard dependency."""
+    from pyrobot.ai.training import OptionalLightGBMDirectionModel
+    return OptionalLightGBMDirectionModel
+
+
 MODEL_TYPES: Dict[str, type] = {
     LogisticDirectionModel.model_type: LogisticDirectionModel,
     VolatilityForecaster.model_type: VolatilityForecaster,
+    "lightgbm_direction": _lazy_import_lightgbm,  # resolved lazily
 }
 
 
 def model_class_for_type(model_type: str) -> type[BaseQuantModel]:
     """Map a registry model_type tag to its model class."""
-    cls = MODEL_TYPES.get(model_type)
-    if cls is None:
+    cls_or_factory = MODEL_TYPES.get(model_type)
+    if cls_or_factory is None:
         raise ValueError(f"Unknown model_type '{model_type}'. Known: {list(MODEL_TYPES)}")
-    return cls
+    # Resolve lazy import factories
+    if callable(cls_or_factory) and not isinstance(cls_or_factory, type):
+        return cls_or_factory()
+    return cls_or_factory
