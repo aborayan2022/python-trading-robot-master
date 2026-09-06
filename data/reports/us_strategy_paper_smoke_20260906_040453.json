@@ -1,0 +1,17 @@
+{
+  "title": "US Strategy Paper Smoke \u2014 USTrendFollowStrategy (Alpaca paper)",
+  "generated_at": "2026-09-06T04:04:53.058769+00:00",
+  "symbols": [
+    "AAPL",
+    "MSFT",
+    "NVDA"
+  ],
+  "bars_max": 30,
+  "bar_interval_seconds": 3.0,
+  "status": "market_closed",
+  "honesty_notes": [
+    "Wiring smoke only: day-scale trend strategies legitimately emit HOLD on a handful of minute bars, so zero orders is a PASS here, not a failure.",
+    "Trade economics and signal quality are measured in us_strategy_backtest.py (cost-adjusted next-bar-open daily backtest), not here.",
+    "Paper positions carry no sector metadata, so the risk manager buckets all longs under 'UNKNOWN'; the conservative 15% UNKNOWN-sector limit caps concurrent entries."
+  ]
+}

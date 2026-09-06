@@ -6,7 +6,7 @@ through BacktestEngine (next-bar execution + ExecutionCostModel) to produce
 net PnL, annualized Sharpe, max drawdown, profit factor, and EV per trade.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np

@@ -8,11 +8,8 @@ This script:
 """
 
 import json
-import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import yfinance as yf
 
@@ -96,23 +93,23 @@ def main():
     # Display results
     print("\n3. Results:")
     print(f"   Approved for challenger: {report['approved_for_challenger']}")
-    print(f"   Walk-forward summary:")
+    print("   Walk-forward summary:")
     wf = report["walk_forward"]
     for key in ["oos_accuracy", "train_accuracy", "oos_predictions"]:
         if key in wf:
             print(f"     {key}: {wf[key]}")
 
-    print(f"   Baselines:")
+    print("   Baselines:")
     for k, v in report["baselines"].items():
         print(f"     {k}: {v:.4f}")
 
-    print(f"   Calibration (OOS):")
+    print("   Calibration (OOS):")
     ece = report["calibration_oos"].get("expected_calibration_error", "N/A")
     print(f"     ECE: {ece}")
 
     meta = report["model"]
     oos_m = meta.get("oos_metrics", {})
-    print(f"   Economic metrics:")
+    print("   Economic metrics:")
     for k in ["net_pnl_after_costs", "sharpe", "profit_factor", "n_trades", "ev_per_trade"]:
         if k in oos_m:
             print(f"     {k}: {oos_m[k]}")
@@ -120,19 +117,19 @@ def main():
     shadow_keys = ["shadow_accuracy", "shadow_ece", "shadow_net_pnl"]
     has_shadow = any(k in oos_m for k in shadow_keys)
     if has_shadow:
-        print(f"   Shadow metrics:")
+        print("   Shadow metrics:")
         for k in shadow_keys:
             if k in oos_m:
                 print(f"     {k}: {oos_m[k]}")
 
     print(f"\n   Model status: {meta.get('status')}")
-    print(f"   Report saved to: first_strategy_report.json")
+    print("   Report saved to: first_strategy_report.json")
     print(f"   Registry at: {registry_dir}")
 
     # Save report
     with open("first_strategy_report.json", "w") as f:
         json.dump(report, f, indent=2, default=str)
-    print(f"\n4. Done. Report written to first_strategy_report.json")
+    print("\n4. Done. Report written to first_strategy_report.json")
 
 
 if __name__ == "__main__":

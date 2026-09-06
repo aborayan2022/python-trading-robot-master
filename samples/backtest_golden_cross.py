@@ -1,11 +1,8 @@
 """Sample: Backtest the Golden Crossover strategy."""
 
-import operator
 
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from pyrobot.indicators import Indicators
 from pyrobot.backtesting.engine import BacktestEngine
 
 

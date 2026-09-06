@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from pyrobot.ai.calibration import IsotonicCalibrator
 
@@ -14,8 +13,6 @@ class TestWO7SizingConfidence:
         """Same features, engine with vs without calibrator → measurably different position sizes."""
         from pyrobot.ai.ensemble import EnsembleSignalEngine
         from pyrobot.ai.models import LogisticDirectionModel
-        from pyrobot.risk.limits import RiskLimits
-        from pyrobot.risk.manager import RiskManager
 
         rng = np.random.default_rng(777)
         n = 200
@@ -94,8 +91,8 @@ class TestWO7SizingConfidence:
 
     def test_position_sizer_confidence_scaling(self):
         """PositionSizer scales output by confidence — higher confidence → more shares."""
-        from pyrobot.risk.position_sizer import PositionSizer
         from pyrobot.risk.limits import RiskLimits
+        from pyrobot.risk.position_sizer import PositionSizer
 
         sizer = PositionSizer(limits=RiskLimits())
 

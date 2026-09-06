@@ -145,6 +145,16 @@ def create_api_router(supervisor: RuntimeSupervisor, settings_manager: Optional[
             logger.warning("Failed to read metrics history: %s", exc)
             return []
 
+    # ── Trading Operations Reports (VIEWER+) ────────────────────────────────
+
+    @router.get("/reports/performance")
+    def get_performance_report(_role: ConsoleRole = Depends(require_role(ConsoleRole.VIEWER))) -> Dict[str, Any]:
+        return supervisor.get_performance_report()
+
+    @router.get("/reports/backtests")
+    def get_backtest_reports(_role: ConsoleRole = Depends(require_role(ConsoleRole.VIEWER))) -> Dict[str, Any]:
+        return supervisor.get_backtest_reports()
+
     @router.get("/stream")
     async def sse_stream(
         request: Request,
@@ -229,6 +239,10 @@ def create_api_router(supervisor: RuntimeSupervisor, settings_manager: Optional[
             )
         return {"status": "ok", "state": supervisor.state.value}
 
+    @router.get("/control/config")
+    def get_config(_role: ConsoleRole = Depends(require_role(ConsoleRole.MANAGER))) -> Dict[str, Any]:
+        return supervisor.config.to_dict()
+
     @router.post("/control/config")
     def control_update_config(
         payload: ConfigUpdateRequest,
@@ -283,7 +297,11 @@ def create_api_router(supervisor: RuntimeSupervisor, settings_manager: Optional[
                 action=AuditAction.KILL_SWITCH_TRIGGERED,
                 details={"reason": payload.reason, "detail": payload.detail, "operator": "MANAGER"},
             )
-        return {"status": "ok", "kill_switch_active": True}
+            return {"status": "ok", "kill_switch_active": True}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active pipeline — start the trading loop before using the kill switch.",
+        )
 
     @router.post("/control/kill-switch/reset")
     def reset_kill_switch(
@@ -301,7 +319,11 @@ def create_api_router(supervisor: RuntimeSupervisor, settings_manager: Optional[
                 action=AuditAction.KILL_SWITCH_RESET,
                 details={"reason": payload.reason, "operator": "MANAGER"},
             )
-        return {"status": "ok", "kill_switch_active": False}
+            return {"status": "ok", "kill_switch_active": False}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active pipeline — start the trading loop before resetting the kill switch.",
+        )
 
     @router.post("/control/live-unlock")
     def control_live_unlock(

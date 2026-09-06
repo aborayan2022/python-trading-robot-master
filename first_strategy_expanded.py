@@ -10,7 +10,6 @@ Universe: 10 large-cap US equities across sectors.
 Period:   5 years daily.
 """
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -134,7 +133,7 @@ def main():
                 print(f"     {k}: {oos_m[k]}")
 
     print(f"\n   Model status: {meta.get('status')}")
-    print(f"   Report saved to: first_strategy_expanded_report.json")
+    print("   Report saved to: first_strategy_expanded_report.json")
     print(f"   Registry at: {registry_dir}")
 
 

@@ -1,14 +1,9 @@
 """Sample: Trading robot using the PaperBroker for local simulation."""
 
-import operator
 import pprint
 
-from datetime import datetime
-from datetime import timedelta
-
-from pyrobot.robot import PyRobot
-from pyrobot.indicators import Indicators
 from pyrobot.brokers import PaperBroker
+from pyrobot.robot import PyRobot
 
 # Create a PaperBroker with $100k starting balance.
 broker = PaperBroker(initial_balance=100_000.0)

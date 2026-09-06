@@ -1,4 +1,4 @@
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -36,17 +36,17 @@ class Indicators():
 
         self._stock_frame: StockFrame = price_data_frame
         self._price_groups = price_data_frame.symbol_groups
-        self._current_indicators = {}
-        self._indicator_signals = {}
+        self._current_indicators: Dict[str, Any] = {}
+        self._indicator_signals: Dict[str, Any] = {}
         self._frame = self._stock_frame.frame
 
-        self._indicators_comp_key = []
-        self._indicators_key = []
+        self._indicators_comp_key: List[str] = []
+        self._indicators_key: List[str] = []
 
         if self.is_multi_index:
             True
 
-    def get_indicator_signal(self, indicator: str= None) -> Dict:
+    def get_indicator_signal(self, indicator: Optional[str] = None) -> Any:
         """Return the raw Pandas Dataframe Object.
 
         Arguments:
@@ -64,7 +64,7 @@ class Indicators():
             return self._indicator_signals
 
     def set_indicator_signal(self, indicator: str, buy: float, sell: float, condition_buy: Any, condition_sell: Any,
-                             buy_max: float = None, sell_max: float = None, condition_buy_max: Any = None, condition_sell_max: Any = None) -> None:
+                             buy_max: Optional[float] = None, sell_max: Optional[float] = None, condition_buy_max: Any = None, condition_sell_max: Any = None) -> None:
         """Used to set an indicator where one indicator crosses above or below a certain numerical threshold.
 
         Arguments:
@@ -276,11 +276,15 @@ class Indicators():
         # Calculate the Relative Strength
         relative_strength = self._frame['ewma_up'] / self._frame['ewma_down']
 
-        # Calculate the Relative Strength Index
-        relative_strength_index = 100.0 - (100.0 / (1.0 + relative_strength))
+        # Calculate the Relative Strength Index.
+        # The formula is applied exactly once; when the average loss is zero
+        # (ewma_down == 0) the RS is infinite and RSI is defined as 100.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            relative_strength_index = 100.0 - (100.0 / (1.0 + relative_strength))
 
-        # Add the info to the data frame.
-        self._frame['rsi'] = np.where(relative_strength_index == 0, 100, 100 - (100 / (1 + relative_strength_index)))
+        self._frame['rsi'] = np.where(
+            np.isfinite(relative_strength_index), relative_strength_index, 100.0
+        )
 
         # Clean up before sending back.
         self._frame.drop(

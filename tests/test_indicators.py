@@ -78,6 +78,45 @@ class TestRSI:
         assert (valid["rsi"] >= 0).all()
         assert (valid["rsi"] <= 100).all()
 
+    def test_not_compressed_to_overbought(self):
+        """Regression: RSI must not be double-applied and pinned near 100.
+
+        An oscillating but net-positive series must produce a meaningful RSI
+        spread that stays strictly inside (0, 100), and a net-positive series
+        must score above its mirror net-negative counterpart.
+        """
+        from pyrobot.runtime.pipeline import _as_stock_frame
+
+        def closes_of(base, drift, amp):
+            return [base + drift * i + amp * np.sin(i / 3.0) for i in range(120)]
+
+        up = closes_of(100.0, 0.5, 3.0)
+        down = closes_of(240.0, -0.5, 3.0)
+
+        def rsi_series(values):
+            df = pd.DataFrame({
+                "open": np.array(values) * 0.998,
+                "high": np.array(values) * 1.01,
+                "low": np.array(values) * 0.99,
+                "close": np.array(values),
+                "volume": 1_000_000.0,
+                "datetime": pd.date_range("2024-01-01", periods=len(values), freq="D"),
+            })
+            sf = _as_stock_frame(df, "TEST")
+            ind = Indicators(price_data_frame=sf)
+            ind.rsi(period=14)
+            return sf.frame.xs("TEST", level="symbol")["rsi"].dropna()
+
+        up_rsi, down_rsi = rsi_series(up), rsi_series(down)
+        # Early bars can legitimately read 100 (all recent periods were up);
+        # the interior, oscillating section must stay strictly inside (0, 100).
+        interior_up = up_rsi.iloc[15:60]
+        interior_down = down_rsi.iloc[15:60]
+        assert (interior_up > 0).all() and (interior_up < 100).all()
+        assert (interior_down > 0).all() and (interior_down < 100).all()
+        assert up_rsi.mean() > down_rsi.mean()
+        assert up_rsi.mean() < 99.0  # the historical bug pinned RSI near 100
+
 
 class TestSMA:
     """Tests for SMA calculation."""

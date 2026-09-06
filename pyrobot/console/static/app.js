@@ -82,7 +82,40 @@
       lbl_auth_token: "رمز التوكن (Access Token):",
       btn_submit_login: "دخول",
       btn_cancel: "إلغاء",
-      btn_confirm: "تأكيد وتنفيذ"
+      btn_confirm: "تأكيد وتنفيذ",
+      tab_reports: "تقارير العمليات",
+      panel_reports_title: "تقارير العمليات والتداول (Trading Operations Reports)",
+      reports_hint: "تعتمد المؤشرات والمؤامرة على سجل المقاييس المثبت على القرص (runtime_metrics.jsonl) وسجل التدقيق، وتعكس آخر جلسة تشغيل مكتملة حتى عند إيقاف المحرك.",
+      kpi_returns: "العائد الكلي",
+      kpi_final_equity: "إجمالي المحفظة النهائي",
+      kpi_max_dd: "أقصى تراجع",
+      kpi_orders: "الأوامر",
+      kpi_best_day: "أفضل يوم",
+      kpi_worst_day: "أسوأ يوم",
+      panel_report_equity: "منحنى المحفظة (Equity Curve)",
+      panel_daily_perf: "الأداء اليومي (Daily Performance)",
+      panel_trades: "عمليات التنفيذ الأخيرة (Recent Fills)",
+      panel_backtests: "نتائج الاختبارات الخلفية (Backtest Reports)",
+      th_date: "التاريخ",
+      th_equity: "إجمالي المحفظة",
+      th_day_return: "العائد اليومي",
+      th_positions: "عدد المراكز",
+      th_side_direction: "الاتجاه",
+      th_fill_price: "سعر التنفيذ",
+      th_source: "المصدر",
+      th_report_name: "اسم التقرير",
+      th_strategy: "الاستراتيجية",
+      th_backtest_return: "العائد",
+      th_sharpe: "Sharpe",
+      th_reports_count: "عدد",
+      report_empty: "لا توجد بيانات بعد.",
+      report_no_data: "لا توجد بيانات كافية لتوليد تقرير بعد.",
+      report_generated: "آخر تحديث",
+      backtest_strategy_buy_hold: "شراء واحتفاظ",
+      status_buy: "شراء",
+      status_sell: "بيع",
+      status_unknown: "غير معروف",
+      err_action_failed: "فشل التنفيذ"
     },
     en: {
       nav_console_sub: "Command & Control Dashboard",
@@ -158,7 +191,40 @@
       lbl_auth_token: "Access Token:",
       btn_submit_login: "Sign In",
       btn_cancel: "Cancel",
-      btn_confirm: "Confirm & Execute"
+      btn_confirm: "Confirm & Execute",
+      tab_reports: "Operations Reports",
+      panel_reports_title: "Trading Operations Reports",
+      reports_hint: "Indicators and charts are derived from the on-disk metrics ledger (runtime_metrics.jsonl) and audit ledger, reflecting the last completed session even while the engine is stopped.",
+      kpi_returns: "Total Return",
+      kpi_final_equity: "Final Equity",
+      kpi_max_dd: "Max Drawdown",
+      kpi_orders: "Orders",
+      kpi_best_day: "Best Day",
+      kpi_worst_day: "Worst Day",
+      panel_report_equity: "Equity Curve",
+      panel_daily_perf: "Daily Performance",
+      panel_trades: "Recent Fills",
+      panel_backtests: "Backtest Reports",
+      th_date: "Date",
+      th_equity: "Equity",
+      th_day_return: "Day Return",
+      th_positions: "Positions",
+      th_side_direction: "Direction",
+      th_fill_price: "Fill Price",
+      th_source: "Source",
+      th_report_name: "Report Name",
+      th_strategy: "Strategy",
+      th_backtest_return: "Return",
+      th_sharpe: "Sharpe",
+      th_reports_count: "Count",
+      report_empty: "No data yet.",
+      report_no_data: "Not enough data to produce a report yet.",
+      report_generated: "Updated",
+      backtest_strategy_buy_hold: "Buy & Hold",
+      status_buy: "Buy",
+      status_sell: "Sell",
+      status_unknown: "Unknown",
+      err_action_failed: "Action failed"
     }
   };
 
@@ -171,6 +237,7 @@
     overview: {},
     equityHistory: [],
     eventSource: null,
+    lastPerformanceReport: null,
   };
 
   // ── DOM Elements ──────────────────────────────────────────────────────────
@@ -251,6 +318,21 @@
     auditTbody: document.getElementById('audit-tbody'),
     auditActionFilter: document.getElementById('audit-action-filter'),
     btnRefreshAudit: document.getElementById('btn-refresh-audit'),
+
+    // Trading Operations Reports
+    btnRefreshReports: document.getElementById('btn-refresh-reports'),
+    rptTotalReturn: document.getElementById('rpt-total-return'),
+    rptFinalEquity: document.getElementById('rpt-final-equity'),
+    rptMaxDd: document.getElementById('rpt-max-dd'),
+    rptTrades: document.getElementById('rpt-trades'),
+    rptBestDay: document.getElementById('rpt-best-day'),
+    rptWorstDay: document.getElementById('rpt-worst-day'),
+    rptCurveCount: document.getElementById('rpt-curve-count'),
+    reportsEquityChart: document.getElementById('reports-equity-chart'),
+    reportsDailyTbody: document.getElementById('reports-daily-tbody'),
+    reportsTradesTbody: document.getElementById('reports-trades-tbody'),
+    reportsBacktestsTbody: document.getElementById('reports-backtests-tbody'),
+    rptBacktestsCount: document.getElementById('rpt-backtests-count'),
     
     // Modals
     modalBackdrop: document.getElementById('modal-backdrop'),
@@ -321,6 +403,26 @@
     }
   }
 
+  // Extract a user-readable message from a failed API response ({detail}).
+  async function formatApiError(res, fallback) {
+    const fallbackText = fallback || (state.lang === 'ar' ? 'فشل التنفيذ' : 'Action failed');
+    try {
+      if (!res || !res.ok) {
+        const data = await res.json();
+        const msg =
+          data?.detail ||
+          data?.message ||
+          data?.error ||
+          data?.statusText ||
+          (typeof data === 'string' ? data : null);
+        return msg ? `${fallbackText}: ${msg}` : fallbackText;
+      }
+    } catch {
+      // Body was already consumed or not JSON — fall back to a generic message.
+    }
+    return fallbackText;
+  }
+
   // ── Tab Management ────────────────────────────────────────────────────────
   function initTabs() {
     dom.tabBtns.forEach((btn) => {
@@ -333,8 +435,9 @@
         if (targetPane) targetPane.classList.add('active');
 
         if (tab === 'audit') loadAuditLogs();
-        if (tab === 'control') loadRiskLimits();
+        if (tab === 'control') { loadRiskLimits(); loadEngineConfig(); }
         if (tab === 'overview') renderEquityChart();
+        if (tab === 'reports') loadReports();
       });
     });
   }
@@ -745,6 +848,252 @@
     } catch {}
   }
 
+  // Prefill the engine config form from the persisted config (Manager).
+  async function loadEngineConfig() {
+    try {
+      const res = await apiFetch('/api/control/config');
+      if (!res.ok) return;
+      const cfg = await res.json();
+      if (cfg.profile) dom.cfgProfile.value = cfg.profile;
+      if (Array.isArray(cfg.symbols)) dom.cfgSymbols.value = cfg.symbols.join(', ');
+      if (cfg.signal_source) dom.cfgSource.value = cfg.signal_source;
+      if (cfg.bar_interval) dom.cfgInterval.value = cfg.bar_interval;
+      if (cfg.initial_balance) dom.cfgBalance.value = cfg.initial_balance;
+    } catch {}
+  }
+
+  // ── Trading Operations Reports ────────────────────────────────────────────
+  function fmtMoney(v) {
+    return `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  function fmtPct(v, digits = 2) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '--';
+    return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}%`;
+  }
+
+  function emptyRow(colspan, tbody, key) {
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">${I18N[state.lang][key] || I18N[state.lang].report_empty}</td></tr>`;
+  }
+
+  async function loadReports() {
+    await Promise.all([loadPerformanceReport(), loadBacktests()]);
+  }
+
+  async function loadPerformanceReport() {
+    try {
+      const res = await apiFetch('/api/reports/performance');
+      if (!res.ok) return;
+      const report = await res.json();
+      state.lastPerformanceReport = report;
+      renderPerformanceReport(report);
+    } catch {}
+  }
+
+  function renderPerformanceReport(report) {
+    const t = I18N[state.lang];
+    const s = report.summary || {};
+
+    if (!report.report_available) {
+      dom.rptTotalReturn.textContent = '--';
+      dom.rptFinalEquity.textContent = '--';
+      dom.rptMaxDd.textContent = '--';
+      dom.rptTrades.textContent = '--';
+      dom.rptBestDay.textContent = '--';
+      dom.rptWorstDay.textContent = '--';
+      dom.rptCurveCount.textContent = '--';
+      emptyRow(4, dom.reportsDailyTbody, 'report_no_data');
+      emptyRow(6, dom.reportsTradesTbody, 'report_no_data');
+      dom.reportsEquityChart.getContext('2d').clearRect(0, 0, dom.reportsEquityChart.width, dom.reportsEquityChart.height);
+      return;
+    }
+
+    dom.rptTotalReturn.textContent = fmtPct(s.total_return_pct);
+    dom.rptTotalReturn.className = `kpi-value font-mono ${(s.total_return_pct || 0) >= 0 ? 'text-success' : 'text-danger'}`;
+    dom.rptFinalEquity.textContent = fmtMoney(s.final_equity);
+    dom.rptMaxDd.textContent = `${Number(s.max_drawdown_pct || 0).toFixed(2)}%`;
+    dom.rptTrades.textContent = `${s.total_orders ?? 0}`;
+    dom.rptBestDay.textContent = fmtPct(s.best_day_pct);
+    dom.rptWorstDay.textContent = fmtPct(s.worst_day_pct);
+    dom.rptCurveCount.textContent = report.generated_at
+      ? `${t.report_generated}: ${new Date(report.generated_at).toLocaleString()}`
+      : '--';
+
+    renderReportsEquityChart(report.equity_curve || []);
+    renderDailyPerformance(report.daily_performance || []);
+    renderTrades(report.trades || []);
+  }
+
+  function renderDailyPerformance(rows) {
+    if (!rows.length) {
+      emptyRow(4, dom.reportsDailyTbody, 'report_empty');
+      return;
+    }
+    dom.reportsDailyTbody.innerHTML = rows.slice(-30).reverse().map((r) => {
+      const ret = r.return_pct;
+      const retCls = ret === null ? 'text-muted' : ret >= 0 ? 'text-success' : 'text-danger';
+      const retTxt = ret === null ? '--' : fmtPct(ret);
+      const posCount = r.positions ? Object.keys(r.positions).length : 0;
+      return `
+        <tr>
+          <td class="font-mono">${r.date}</td>
+          <td class="font-mono">${fmtMoney(r.equity)}</td>
+          <td class="font-mono font-bold ${retCls}">${retTxt}</td>
+          <td class="font-mono">${posCount}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderTrades(rows) {
+    const t = I18N[state.lang];
+    if (!rows.length) {
+      emptyRow(6, dom.reportsTradesTbody, 'report_empty');
+      return;
+    }
+    dom.reportsTradesTbody.innerHTML = rows.map((r) => {
+      const rawSide = String(r.side || '').toUpperCase();
+      let side = t.status_unknown;
+      if (rawSide === 'BUY' || rawSide === 'BUY_TO_COVER') side = t.status_buy;
+      else if (rawSide === 'SELL' || rawSide === 'SELL_SHORT') side = t.status_sell;
+      const qty = r.quantity === null || r.quantity === undefined ? '--' : r.quantity;
+      const price = r.fill_price === null || r.fill_price === undefined ? '--' : `$${Number(r.fill_price).toFixed(2)}`;
+      const partial = r.partial ? ' (partial)' : '';
+      return `
+        <tr>
+          <td class="font-mono">${(r.timestamp || '').replace('T', ' ').slice(0, 19)}</td>
+          <td class="font-mono font-bold">${r.symbol || '--'}</td>
+          <td class="font-mono">${side}${partial}</td>
+          <td class="font-mono">${qty}</td>
+          <td class="font-mono">${price}</td>
+          <td class="font-mono">${r.source || '--'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Canvas 2D line chart for the report equity curve (zero dependency).
+  function renderReportsEquityChart(curve) {
+    const canvas = dom.reportsEquityChart;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const width = (canvas.width = canvas.parentElement.clientWidth);
+    const height = (canvas.height = canvas.parentElement.clientHeight);
+
+    ctx.clearRect(0, 0, width, height);
+
+    if (!curve || curve.length < 2) {
+      ctx.fillStyle = '#64748b';
+      ctx.font = '13px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(I18N[state.lang].report_no_data, width / 2, height / 2);
+      return;
+    }
+
+    const values = curve.map((c) => Number(c.equity || 0));
+    const minVal = Math.min(...values) * 0.9995;
+    const maxVal = Math.max(...values) * 1.0005;
+    const padding = { top: 20, right: 30, bottom: 25, left: 70 };
+    const chartW = width - padding.left - padding.right;
+    const chartH = height - padding.top - padding.bottom;
+
+    // Grid + Y axis labels
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = padding.top + (chartH / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(width - padding.right, y);
+      ctx.stroke();
+      const val = maxVal - ((maxVal - minVal) / 4) * i;
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`$${val.toFixed(0)}`, padding.left - 8, y + 3);
+    }
+
+    const points = curve.map((c, i) => {
+      const x = padding.left + (chartW / (curve.length - 1)) * i;
+      const y = padding.top + chartH - ((Number(c.equity) - minVal) / (maxVal - minVal)) * chartH;
+      return { x, y };
+    });
+
+    // Area fill
+    const grad = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
+    grad.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
+    grad.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    points.forEach((p) => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(points[points.length - 1].x, height - padding.bottom);
+    ctx.lineTo(points[0].x, height - padding.bottom);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = '#06b6d4';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.moveTo(points[0].x, points[0].y);
+    points.forEach((p) => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+
+    // End point pulse
+    const lastP = points[points.length - 1];
+    ctx.beginPath();
+    ctx.arc(lastP.x, lastP.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  async function loadBacktests() {
+    try {
+      const res = await apiFetch('/api/reports/backtests');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderBacktests(data.reports || []);
+    } catch {}
+  }
+
+  function renderBacktests(reports) {
+    const t = I18N[state.lang];
+    dom.rptBacktestsCount.textContent = reports.length;
+    if (!reports.length) {
+      emptyRow(7, dom.reportsBacktestsTbody, 'report_empty');
+      return;
+    }
+    dom.reportsBacktestsTbody.innerHTML = reports.slice().reverse().map((r) => {
+      const sum = r.summary || {};
+      const name = (r.file || r.name || '').replace(/\.json$/, '');
+      const strategy = (r.strategy || sum.strategy || '--');
+      const ret = fmtPct(sum.total_return_pct);
+      const retCls = (sum.total_return_pct || 0) >= 0 ? 'text-success' : 'text-danger';
+      const sharp = Number(sum.sharpe);
+      const sharpTxt = Number.isFinite(sharp) ? sharp.toFixed(4) : '--';
+      const maxDd = sum.max_drawdown_pct === null || sum.max_drawdown_pct === undefined ? '--' : `${Number(sum.max_drawdown_pct).toFixed(2)}%`;
+      const trades = sum.trades === null || sum.trades === undefined ? '--' : Number(sum.trades);
+      const numReports = r.reports_count || sum.reports_count || '--';
+      return `
+        <tr>
+          <td class="font-mono">${name}</td>
+          <td class="font-mono">${strategy}</td>
+          <td class="font-mono font-bold ${retCls}">${ret}</td>
+          <td class="font-mono">${sharpTxt}</td>
+          <td class="font-mono">${maxDd}</td>
+          <td class="font-mono">${trades}</td>
+          <td class="font-mono">${numReports}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
   // ── Event Listeners Setup ─────────────────────────────────────────────────
   function initEventListeners() {
     // Language Toggle
@@ -792,17 +1141,29 @@
     // Engine Lifecycle Buttons
     dom.btnCtrlStart.addEventListener('click', async () => {
       const res = await apiFetch('/api/control/start', { method: 'POST' });
-      if (res.ok) showToast('Engine started', 'success');
+      if (res.ok) {
+        showToast(state.lang === 'ar' ? 'تم تشغيل المحرك' : 'Engine started', 'success');
+      } else {
+        showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر تشغيل المحرك' : 'Failed to start engine'), 'error');
+      }
     });
 
     dom.btnCtrlPause.addEventListener('click', async () => {
       const res = await apiFetch('/api/control/pause', { method: 'POST' });
-      if (res.ok) showToast('Engine paused', 'warning');
+      if (res.ok) {
+        showToast(state.lang === 'ar' ? 'تم إيقاف المحرك مؤقتاً' : 'Engine paused', 'warning');
+      } else {
+        showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر الإيقاف المؤقت' : 'Failed to pause engine'), 'error');
+      }
     });
 
     dom.btnCtrlResume.addEventListener('click', async () => {
       const res = await apiFetch('/api/control/resume', { method: 'POST' });
-      if (res.ok) showToast('Engine resumed', 'success');
+      if (res.ok) {
+        showToast(state.lang === 'ar' ? 'تم استئناف المحرك' : 'Engine resumed', 'success');
+      } else {
+        showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر الاستئناف' : 'Failed to resume engine'), 'error');
+      }
     });
 
     dom.btnCtrlStop.addEventListener('click', () => {
@@ -811,7 +1172,11 @@
         state.lang === 'ar' ? 'هل أنت متأكد من إيقاف حلقة التداول رشيقة؟' : 'Are you sure you want to gracefully stop the trading loop?',
         async () => {
           const res = await apiFetch('/api/control/stop', { method: 'POST' });
-          if (res.ok) showToast('Engine stopped gracefully', 'info');
+          if (res.ok) {
+            showToast(state.lang === 'ar' ? 'تم إيقاف المحرك برشاقة' : 'Engine stopped gracefully', 'info');
+          } else {
+            showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر إيقاف المحرك' : 'Failed to stop engine'), 'error');
+          }
         }
       );
     });
@@ -826,7 +1191,11 @@
             method: 'POST',
             body: JSON.stringify({ reason: 'OPERATOR_PANIC', confirmed: true }),
           });
-          if (res.ok) showToast('Kill switch activated!', 'error');
+          if (res.ok) {
+            showToast(state.lang === 'ar' ? 'تم تفعيل مفتاح الطوارئ' : 'Kill switch activated!', 'error');
+          } else {
+            showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر تفعيل مفتاح الطوارئ' : 'Failed to activate kill switch'), 'error');
+          }
         }
       );
     });
@@ -840,7 +1209,11 @@
             method: 'POST',
             body: JSON.stringify({ reason: 'OPERATOR_RESET', confirmed: true }),
           });
-          if (res.ok) showToast('Kill switch reset', 'success');
+          if (res.ok) {
+            showToast(state.lang === 'ar' ? 'تم إعادة ضبط مفتاح الطوارئ' : 'Kill switch reset', 'success');
+          } else {
+            showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر إعادة الضبط' : 'Failed to reset kill switch'), 'error');
+          }
         }
       );
     });
@@ -859,7 +1232,11 @@
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      if (res.ok) showToast('Configuration applied with graceful restart', 'success');
+      if (res.ok) {
+        showToast(state.lang === 'ar' ? 'تم تطبيق الإعدادات مع إعادة تشغيل رشيقة' : 'Configuration applied with graceful restart', 'success');
+      } else {
+        showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر تطبيق الإعدادات' : 'Failed to apply configuration'), 'error');
+      }
     });
 
     // Risk Limits Form Submit
@@ -875,7 +1252,11 @@
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
-      if (res.ok) showToast('Risk limits validated and saved', 'success');
+      if (res.ok) {
+        showToast(state.lang === 'ar' ? 'تم حفظ حدود المخاطر بعد التحقق' : 'Risk limits validated and saved', 'success');
+      } else {
+        showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر حفظ حدود المخاطر' : 'Failed to save risk limits'), 'error');
+      }
     });
 
     // Live Unlock Form Submit
@@ -939,7 +1320,13 @@
     if (dom.btnRefreshAudit) dom.btnRefreshAudit.addEventListener('click', loadAuditLogs);
     if (dom.auditActionFilter) dom.auditActionFilter.addEventListener('change', loadAuditLogs);
 
-    window.addEventListener('resize', renderEquityChart);
+    // Reports refresh
+    if (dom.btnRefreshReports) dom.btnRefreshReports.addEventListener('click', loadReports);
+
+    window.addEventListener('resize', () => {
+      renderEquityChart();
+      if (state.lastPerformanceReport) renderPerformanceReport(state.lastPerformanceReport);
+    });
   }
 
   // ── Theme & Branding ─────────────────────────────────────────────────────

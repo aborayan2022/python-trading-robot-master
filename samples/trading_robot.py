@@ -5,14 +5,10 @@ Supports: paper, schwab, alpaca, ibkr
 Install broker extras: pip install python-trading-robot[alpaca]
 """
 
-import time as time_lib
 import pprint
-import operator
-from datetime import datetime, timedelta
 
-from pyrobot.robot import PyRobot
-from pyrobot.indicators import Indicators
 from pyrobot.brokers import create_broker
+from pyrobot.robot import PyRobot
 
 # --- Choose your broker ---
 # For live trading, replace 'paper' with 'schwab', 'alpaca', or 'ibkr'

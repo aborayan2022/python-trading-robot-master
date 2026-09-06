@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pyrobot.ai.economic_gate import EconomicMetrics, evaluate_oos_economics
+from pyrobot.ai.economic_gate import evaluate_oos_economics
 from pyrobot.ai.registry import (
     ModelMetadata,
     ModelNotApprovedError,
@@ -86,7 +86,7 @@ class TestWO4EconomicGate:
 
         # Set up probabilities that generate frequent small trades
         # Every 5 bars flip between BUY and SELL, creating high turnover
-        rng = np.random.default_rng(201)
+        _rng = np.random.default_rng(201)
         probs = np.full(n, 0.5)
         for i in range(0, n, 5):
             if i % 10 == 0:

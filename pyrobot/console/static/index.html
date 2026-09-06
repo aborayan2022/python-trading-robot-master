@@ -38,6 +38,10 @@
           <span class="tab-icon">🎛️</span>
           <span data-i18n="tab_control">غرفة التحكم</span>
         </button>
+        <button class="tab-btn" data-tab="reports">
+          <span class="tab-icon">📈</span>
+          <span data-i18n="tab_reports">تقارير العمليات</span>
+        </button>
         <button class="tab-btn" data-tab="audit">
           <span class="tab-icon">📜</span>
           <span data-i18n="tab_audit">سجل التدقيق</span>
@@ -296,6 +300,7 @@
                 <label data-i18n="lbl_signal_source">مصدر الإشارات (Signal Source)</label>
                 <select id="cfg-source" class="form-control">
                   <option value="example">Example Strategy (Demo SMA Cross)</option>
+                  <option value="trend">Trend-Follow Strategy (US Equities)</option>
                   <option value="ensemble">AI Ensemble Engine</option>
                 </select>
               </div>
@@ -429,7 +434,139 @@
         </div>
       </section>
 
-      <!-- ── TAB 3: AUDIT & LOGS ─────────────────────────────────────────── -->
+      <!-- ── TAB 3: OPERATIONS REPORTS ───────────────────────────────────── -->
+      <section class="tab-pane" id="pane-reports">
+        <div class="reports-toolbar">
+          <div class="panel-header">
+            <h3 data-i18n="panel_reports_title">تقارير العمليات والتداول (Trading Operations Reports)</h3>
+            <button class="btn btn-outline btn-sm" id="btn-refresh-reports">🔄 <span
+                data-i18n="btn_refresh">تحديث</span></button>
+          </div>
+          <div class="alert-box alert-info" data-i18n="reports_hint">
+            تعتمد المؤشرات والمؤامرة على سجل المقاييس المثبت على القرص (runtime_metrics.jsonl) وسجل التدقيق، وتعكس آخر
+            جلسة تشغيل مكتملة حتى عند إيقاف المحرك.
+          </div>
+        </div>
+
+        <!-- Performance KPI Cards -->
+        <div class="kpi-grid" id="reports-kpis">
+          <div class="kpi-card">
+            <span class="kpi-label" data-i18n="kpi_returns">العائد الكلي</span>
+            <span class="kpi-value font-mono" id="rpt-total-return">--</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label" data-i18n="kpi_final_equity">إجمالي المحفظة النهائي</span>
+            <span class="kpi-value font-mono" id="rpt-final-equity">--</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label" data-i18n="kpi_max_dd">أقصى تراجع</span>
+            <span class="kpi-value font-mono" id="rpt-max-dd">--</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label" data-i18n="kpi_orders">الأوامر</span>
+            <span class="kpi-value font-mono" id="rpt-trades">--</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label" data-i18n="kpi_best_day">أفضل يوم</span>
+            <span class="kpi-value font-mono" id="rpt-best-day">--</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label" data-i18n="kpi_worst_day">أسوأ يوم</span>
+            <span class="kpi-value font-mono" id="rpt-worst-day">--</span>
+          </div>
+        </div>
+
+        <!-- Equity Curve -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 data-i18n="panel_report_equity">منحنى المحفظة (Equity Curve)</h3>
+            <span class="badge badge-neutral font-mono" id="rpt-curve-count">--</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="reports-equity-chart" class="equity-chart"></canvas>
+          </div>
+        </div>
+
+        <!-- Daily Performance Table -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 data-i18n="panel_daily_perf">الأداء اليومي (Daily Performance)</h3>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table font-mono" id="reports-daily-table">
+              <thead>
+                <tr>
+                  <th data-i18n="th_date">التاريخ</th>
+                  <th data-i18n="th_equity">إجمالي المحفظة</th>
+                  <th data-i18n="th_day_return">العائد اليومي</th>
+                  <th data-i18n="th_positions">عدد المراكز</th>
+                </tr>
+              </thead>
+              <tbody id="reports-daily-tbody">
+                <tr>
+                  <td colspan="4" class="text-center text-muted" data-i18n="report_empty">لا توجد بيانات بعد.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Trade Fills Table -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 data-i18n="panel_trades">عمليات التنفيذ الأخيرة (Recent Fills)</h3>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table font-mono" id="reports-trades-table">
+              <thead>
+                <tr>
+                  <th data-i18n="th_time">الوقت (UTC)</th>
+                  <th data-i18n="th_symbol">الرمز</th>
+                  <th data-i18n="th_side_direction">الاتجاه</th>
+                  <th data-i18n="th_qty">الكمية</th>
+                  <th data-i18n="th_fill_price">سعر التنفيذ</th>
+                  <th data-i18n="th_source">المصدر</th>
+                </tr>
+              </thead>
+              <tbody id="reports-trades-tbody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted" data-i18n="report_empty">لا توجد بيانات بعد.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Backtest Reports List -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 data-i18n="panel_backtests">نتائج الاختبارات الخلفية (Backtest Reports)</h3>
+            <span class="badge badge-neutral font-mono" id="rpt-backtests-count">--</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table font-mono" id="reports-backtests-table">
+              <thead>
+                <tr>
+                  <th data-i18n="th_report_name">اسم التقرير</th>
+                  <th data-i18n="th_strategy">الاستراتيجية</th>
+                  <th data-i18n="th_backtest_return">العائد</th>
+                  <th data-i18n="th_sharpe">Sharpe</th>
+                  <th data-i18n="th_max_dd">أقصى تراجع</th>
+                  <th data-i18n="th_trades">صفقات</th>
+                  <th data-i18n="th_reports_count">عدد</th>
+                </tr>
+              </thead>
+              <tbody id="reports-backtests-tbody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted" data-i18n="report_empty">لا توجد بيانات بعد.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── TAB 4: AUDIT & LOGS ─────────────────────────────────────────── -->
       <section class="tab-pane" id="pane-audit">
         <div class="panel audit-panel">
           <div class="panel-header">

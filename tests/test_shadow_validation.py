@@ -2,9 +2,7 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from pyrobot.ai.economic_gate import evaluate_oos_economics
 from pyrobot.ai.registry import ModelStatus
 
 
@@ -45,21 +43,21 @@ class TestWO5ShadowValidation:
 
     def test_shadow_metrics_recorded_in_metadata(self):
         """Shadow accuracy, ECE, and net_pnl appear in oos_metrics."""
+        import tempfile
+
+        from pyrobot.ai.registry import ModelRegistry
         from pyrobot.ai.training import (
             TrainingGateConfig,
             train_direction_champion_candidate,
         )
-        from pyrobot.ai.registry import ModelRegistry
         from pyrobot.features.engine import FeatureEngine
-
-        import tempfile
 
         market_data = _regime_change_data(n=600)
         feature_engine = FeatureEngine()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             registry = ModelRegistry(registry_dir=tmp_dir)
-            report = train_direction_champion_candidate(
+            _report = train_direction_champion_candidate(
                 market_data=market_data,
                 registry=registry,
                 model_id="shadow_test",
@@ -80,14 +78,14 @@ class TestWO5ShadowValidation:
     def test_shadow_degradation_demotes_to_candidate(self):
         """When the last segment behaves very differently, shadow metrics diverge
         and the degradation gate flips status to CANDIDATE."""
+        import tempfile
+
+        from pyrobot.ai.registry import ModelRegistry
         from pyrobot.ai.training import (
             TrainingGateConfig,
             train_direction_champion_candidate,
         )
-        from pyrobot.ai.registry import ModelRegistry
         from pyrobot.features.engine import FeatureEngine
-
-        import tempfile
 
         # Create data with a sharp regime change in the last 10%
         market_data = _regime_change_data(n=600)
@@ -95,7 +93,7 @@ class TestWO5ShadowValidation:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             registry = ModelRegistry(registry_dir=tmp_dir)
-            report = train_direction_champion_candidate(
+            _report = train_direction_champion_candidate(
                 market_data=market_data,
                 registry=registry,
                 model_id="shadow_degrade_test",
@@ -122,21 +120,21 @@ class TestWO5ShadowValidation:
 
     def test_shadow_metrics_in_report(self):
         """Shadow metrics appear in the training report dict."""
+        import tempfile
+
+        from pyrobot.ai.registry import ModelRegistry
         from pyrobot.ai.training import (
             TrainingGateConfig,
             train_direction_champion_candidate,
         )
-        from pyrobot.ai.registry import ModelRegistry
         from pyrobot.features.engine import FeatureEngine
-
-        import tempfile
 
         market_data = _regime_change_data(n=600)
         feature_engine = FeatureEngine()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             registry = ModelRegistry(registry_dir=tmp_dir)
-            report = train_direction_champion_candidate(
+            _report = train_direction_champion_candidate(
                 market_data=market_data,
                 registry=registry,
                 model_id="shadow_report_test",

@@ -3,6 +3,7 @@
 import json
 import os
 import time
+from pathlib import Path
 from typing import Dict
 from unittest.mock import patch
 
@@ -12,8 +13,13 @@ fastapi = pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from pyrobot.console.app import create_app
-from pyrobot.console.supervisor import ConsoleConfig, RuntimeSupervisor, SupervisorState
+from pyrobot.audit.ledger import AuditAction  # noqa: E402
+from pyrobot.console.app import create_app  # noqa: E402
+from pyrobot.console.supervisor import (  # noqa: E402
+    ConsoleConfig,
+    RuntimeSupervisor,
+    SupervisorState,
+)
 
 
 @pytest.fixture
@@ -21,6 +27,7 @@ def test_supervisor(tmp_path) -> RuntimeSupervisor:
     """Fixture providing a fresh isolated RuntimeSupervisor."""
     audit_file = str(tmp_path / "test_audit.jsonl")
     metrics_file = str(tmp_path / "test_metrics.jsonl")
+    reports_dir = str(tmp_path / "reports")
     config = ConsoleConfig(
         profile="replay",
         symbols=["MSFT", "AAPL"],
@@ -31,6 +38,7 @@ def test_supervisor(tmp_path) -> RuntimeSupervisor:
         initial_balance=100_000.0,
         audit_path=audit_file,
         metrics_path=metrics_file,
+        reports_dir=reports_dir,
     )
     supervisor = RuntimeSupervisor(config)
     yield supervisor
@@ -433,3 +441,173 @@ class TestConsoleSettingsTheme:
             res = client.put("/api/settings/theme", json={"branding": {"logo_url": url}}, headers=headers)
             assert res.status_code == 200, url
             assert res.json()["settings"]["branding"]["logo_url"] == url
+
+
+# ── Trading Operations Reports & Config Prefill ──────────────────────────────
+
+
+class TestTradingReports:
+    """Reports tab: persisted performance report, backtest list, config prefill,
+    kill-switch validation without a pipeline, and last-session persistence."""
+
+    def test_get_config_requires_manager(self, client):
+        assert client.get("/api/control/config").status_code == 401
+        assert client.get("/api/control/config", headers=auth_headers("test-viewer-token")).status_code == 403
+        res = client.get("/api/control/config", headers=auth_headers("test-manager-token"))
+        assert res.status_code == 200
+        data = res.json()
+        assert data["symbols"] == ["MSFT", "AAPL"]
+        assert data["profile"] == "replay"
+        assert "reports_dir" in data
+
+    def test_performance_report_empty_when_no_metrics(self, client):
+        res = client.get("/api/reports/performance", headers=auth_headers("test-viewer-token"))
+        assert res.status_code == 200
+        data = res.json()
+        assert data["report_available"] is False
+        assert data["records_count"] == 0
+        assert data["equity_curve"] == []
+
+    def test_performance_report_builds_from_persisted_metrics(self, client, test_supervisor):
+        metrics_path = Path(test_supervisor.config.metrics_path)
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        with metrics_path.open("w") as f:
+            for i, eq in enumerate([100000.0, 100500.0, 100200.0]):
+                row = {
+                    "timestamp": f"2026-01-{i+5:02d}T20:{i:02d}:00+00:00",
+                    "equity": eq,
+                    "drawdown": 0.0 if i == 0 else 0.003,
+                    "positions": {"MSFT": 10.0},
+                    "orders_count": 2,
+                    "rejected_orders": 0,
+                    "kill_switch_active": False,
+                }
+                f.write(json.dumps(row) + "\n")
+
+        res = client.get("/api/reports/performance", headers=auth_headers("test-viewer-token"))
+        assert res.status_code == 200
+        data = res.json()
+        assert data["report_available"] is True
+        assert data["records_count"] == 3
+        assert data["summary"]["initial_equity"] == 100000.0
+        assert data["summary"]["final_equity"] == 100200.0
+        assert data["summary"]["total_return_pct"] == pytest.approx(0.2, abs=1e-9)
+        assert data["summary"]["days"] == 3
+        assert len(data["equity_curve"]) == 3
+        assert len(data["daily_performance"]) == 3
+        assert data["daily_performance"][-1]["date"] == "2026-01-07"
+
+    def test_performance_report_trades_include_side_from_submitted(self, client, test_supervisor):
+        metrics_path = Path(test_supervisor.config.metrics_path)
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        with metrics_path.open("w") as f:
+            row = {
+                "timestamp": "2026-01-06T20:00:00+00:00",
+                "equity": 100500.0,
+                "drawdown": 0.0,
+                "positions": {"MSFT": 10.0},
+                "orders_count": 2,
+                "rejected_orders": 0,
+                "kill_switch_active": False,
+            }
+            f.write(json.dumps(row) + "\n")
+
+        test_supervisor.audit_ledger.record(
+            action=AuditAction.ORDER_SUBMITTED, symbol="MSFT", order_id="ord-001",
+            strategy_id="us_trend_follow", details={"side": "BUY", "quantity": 10},
+        )
+        test_supervisor.audit_ledger.record(
+            action=AuditAction.ORDER_FILLED, symbol="MSFT", order_id="ord-001",
+            strategy_id="us_trend_follow",
+            details={"filled_quantity": 10, "avg_fill_price": 100.0, "partial": False, "source": "poll_status"},
+        )
+
+        res = client.get("/api/reports/performance", headers=auth_headers("test-viewer-token"))
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["trades"]) == 1
+        trade = data["trades"][0]
+        assert trade["order_id"] == "ord-001"
+        assert trade["side"] == "BUY"
+        assert trade["quantity"] == 10
+        assert trade["fill_price"] == 100.0
+
+    def test_backtest_reports_require_viewer_and_list_json(self, client, test_supervisor):
+        reports_dir = Path(test_supervisor.config.reports_dir)
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        (reports_dir / "us_strategy_backtest_2026.json").write_text(json.dumps({
+            "title": "US Strategy Backtest",
+            "strategy": "trend",
+            "symbols": ["AAPL"],
+            "summary": {"total_return_pct": 5.0},
+            "generated_at": "2026-09-06T00:00:00+00:00",
+        }))
+
+        assert client.get("/api/reports/backtests").status_code == 401
+        assert client.get("/api/reports/backtests", headers=auth_headers("test-viewer-token")).status_code == 200
+        res = client.get("/api/reports/backtests", headers=auth_headers("test-viewer-token"))
+        data = res.json()
+        assert data["reports_dir"] == str(reports_dir)
+        assert len(data["reports"]) == 1
+        assert data["reports"][0]["file"] == "us_strategy_backtest_2026.json"
+        assert data["reports"][0]["summary"]["total_return_pct"] == 5.0
+
+    def test_kill_switch_requires_active_pipeline(self, client, test_supervisor):
+        headers = auth_headers("test-manager-token")
+        assert test_supervisor.state.value == "STOPPED"
+
+        res_activate = client.post(
+            "/api/control/kill-switch/activate",
+            json={"reason": "TEST", "confirmed": True},
+            headers=headers,
+        )
+        assert res_activate.status_code == 400
+        assert "no active pipeline" in res_activate.json()["detail"].lower()
+
+        res_reset = client.post(
+            "/api/control/kill-switch/reset",
+            json={"reason": "TEST", "confirmed": True},
+            headers=headers,
+        )
+        assert res_reset.status_code == 400
+
+    def test_overview_exposes_last_session_after_stop(self, client, test_supervisor):
+        headers = auth_headers("test-viewer-token")
+        test_supervisor.start()
+
+        start_t = time.time()
+        while time.time() - start_t < 3.0:
+            overview = client.get("/api/overview", headers=headers).json()
+            if overview.get("bars_processed", 0) > 0:
+                break
+            time.sleep(0.05)
+
+        test_supervisor.stop(timeout=2.0)
+        overview = client.get("/api/overview", headers=headers).json()
+        assert overview["state"] == "STOPPED"
+        assert overview["last_session"]["source"] == "completed"
+        assert overview["last_session"]["bars_processed"] > 0
+        assert overview["last_equity"] == pytest.approx(100000.0, abs=200)
+
+    def test_boot_restores_last_session_from_disk(self, client, test_supervisor, tmp_path):
+        metrics_path = Path(test_supervisor.config.metrics_path)
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        with metrics_path.open("w") as f:
+            f.write(json.dumps({
+                "timestamp": "2026-01-05T21:00:00+00:00",
+                "equity": 101234.56,
+                "drawdown": 0.01,
+                "positions": {"MSFT": 46.0},
+                "orders_count": 2,
+                "rejected_orders": 0,
+                "kill_switch_active": False,
+            }) + "\n")
+
+        restored = RuntimeSupervisor(test_supervisor.config)
+        try:
+            overview = restored.get_overview()
+            assert overview["last_session"]["source"] == "persisted"
+            assert overview["last_equity"] == pytest.approx(101234.56, abs=0.01)
+            assert overview["bars_processed"] == 0  # metrics record had no bars field
+        finally:
+            restored.stop(timeout=2.0)

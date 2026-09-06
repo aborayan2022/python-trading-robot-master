@@ -1,12 +1,10 @@
-import pprint
 import operator
-
-from datetime import datetime
-from datetime import timedelta
+import pprint
 from configparser import ConfigParser
+from datetime import datetime, timedelta
 
-from pyrobot.robot import PyRobot
 from pyrobot.indicators import Indicators
+from pyrobot.robot import PyRobot
 
 # Grab configuration values.
 config = ConfigParser()

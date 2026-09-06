@@ -1,6 +1,6 @@
-from setuptools import setup
-from setuptools import find_namespace_packages
 import warnings
+
+from setuptools import find_namespace_packages, setup
 
 warnings.warn(
     "setup.py is DEPRECATED. Use pyproject.toml instead. "

@@ -145,7 +145,7 @@ def main():
                 print(f"     {k}: {oos_m[k]}")
 
     print(f"\n   Model status: {meta.get('status')}")
-    print(f"   Report saved to: first_strategy_lightgbm_report.json")
+    print("   Report saved to: first_strategy_lightgbm_report.json")
     print(f"   Registry at: {registry_dir}")
 
     # Comparison summary
@@ -157,7 +157,7 @@ def main():
             Path("./first_strategy_expanded_report.json").read_text(encoding="utf-8")
         )
         lgbm_oos = report["baselines"]["buy_and_hold"]
-        log_oos = logistic_report.get("baselines", {}).get("buy_and_hold", "N/A")
+        _log_oos = logistic_report.get("baselines", {}).get("buy_and_hold", "N/A")
         print(f"  Buy & Hold baseline: {lgbm_oos:.4f}")
         print(f"  Logistic OOS accuracy: {logistic_report['model']['oos_metrics']['oos_accuracy']:.4f}")
         print(f"  LightGBM OOS accuracy: {report['model']['oos_metrics']['oos_accuracy']:.4f}")

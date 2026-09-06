@@ -675,7 +675,7 @@ class TestOptionalLightGBMDirectionModel:
 
     def test_lightgbm_save_load_round_trip(self, tmp_path) -> None:
         """LightGBM model must survive save→load with identical predictions."""
-        lightgbm = pytest.importorskip("lightgbm")
+        pytest.importorskip("lightgbm")
         from pyrobot.ai.training import OptionalLightGBMDirectionModel
 
         rng = np.random.default_rng(42)
@@ -702,7 +702,7 @@ class TestOptionalLightGBMDirectionModel:
 
     def test_lightgbm_predict_proba_shape(self) -> None:
         """LightGBM predict_proba must return [n_samples, 2] with P(down), P(up)."""
-        lightgbm = pytest.importorskip("lightgbm")
+        pytest.importorskip("lightgbm")
         from pyrobot.ai.training import OptionalLightGBMDirectionModel
 
         rng = np.random.default_rng(99)
@@ -716,7 +716,7 @@ class TestOptionalLightGBMDirectionModel:
 
     def test_lightgbm_save_unfitted_raises(self, tmp_path) -> None:
         """Saving an unfitted LightGBM model must raise RuntimeError."""
-        lightgbm = pytest.importorskip("lightgbm")
+        pytest.importorskip("lightgbm")
         from pyrobot.ai.training import OptionalLightGBMDirectionModel
 
         model = OptionalLightGBMDirectionModel(model_id="unfitted")
@@ -725,7 +725,7 @@ class TestOptionalLightGBMDirectionModel:
 
     def test_lightgbm_load_missing_file(self, tmp_path) -> None:
         """Loading from a nonexistent path must raise FileNotFoundError."""
-        lightgbm = pytest.importorskip("lightgbm")
+        pytest.importorskip("lightgbm")
         from pyrobot.ai.training import OptionalLightGBMDirectionModel
 
         with pytest.raises(FileNotFoundError):
@@ -733,7 +733,7 @@ class TestOptionalLightGBMDirectionModel:
 
     def test_lightgbm_registry_round_trip(self, tmp_path) -> None:
         """LightGBM model must be registerable and loadable via ModelRegistry."""
-        lightgbm = pytest.importorskip("lightgbm")
+        pytest.importorskip("lightgbm")
         from pyrobot.ai.training import OptionalLightGBMDirectionModel
 
         rng = np.random.default_rng(77)
@@ -761,7 +761,7 @@ class TestOptionalLightGBMDirectionModel:
 
     def test_lightgbm_registry_tamper_detected(self, tmp_path) -> None:
         """A corrupted LightGBM artifact must fail ModelRegistry's SHA-256 check."""
-        lightgbm = pytest.importorskip("lightgbm")
+        pytest.importorskip("lightgbm")
         from pyrobot.ai.training import OptionalLightGBMDirectionModel
 
         rng = np.random.default_rng(12)
@@ -790,7 +790,7 @@ class TestOptionalLightGBMDirectionModel:
 
     def test_lightgbm_self_contained_metadata(self, tmp_path) -> None:
         """A direct save/load must not depend on a UI-readable sidecar file."""
-        lightgbm = pytest.importorskip("lightgbm")
+        pytest.importorskip("lightgbm")
         from pyrobot.ai.training import OptionalLightGBMDirectionModel
 
         rng = np.random.default_rng(5)
