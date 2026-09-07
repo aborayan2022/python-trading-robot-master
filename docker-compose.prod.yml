@@ -1,0 +1,57 @@
+# Production/paper-trading deployment.
+# Create .env.production locally from .env.production.example before starting.
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: pyrobot-bot
+    restart: unless-stopped
+    env_file:
+      - path: .env.production
+        required: true
+    environment:
+      PYROBOT_SYMBOLS: ${PYROBOT_SYMBOLS:-MSFT,AAPL}
+      PYROBOT_BARS: ${PYROBOT_BARS:-2000}
+      PYROBOT_MODE: ${PYROBOT_MODE:-paper}
+      PYROBOT_BALANCE: ${PYROBOT_BALANCE:-100000}
+      PYROBOT_BAR_INTERVAL: ${PYROBOT_BAR_INTERVAL:-1.0}
+      PYROBOT_AUDIT_PATH: /app/data/audit/ledger.jsonl
+    ports:
+      - "${PYROBOT_CONSOLE_PORT:-8080}:8080"
+    volumes:
+      - bot-data:/app/data
+      - bot-logs:/app/logs
+    networks:
+      - trading-net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: pyrobot-test
+    profiles: ["test"]
+    env_file:
+      - path: .env.production
+        required: true
+    networks:
+      - trading-net
+
+volumes:
+  bot-data:
+  bot-logs:
+
+networks:
+  trading-net:
+    driver: bridge

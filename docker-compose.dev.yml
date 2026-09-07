@@ -5,7 +5,9 @@ services:
       dockerfile: Dockerfile
       target: runtime
     container_name: pyrobot-bot-dev
-    env_file: .env
+    env_file:
+      - path: .env.development
+        required: false
     environment:
       - LOG_LEVEL=DEBUG
       - PYROBOT_MODE=paper
@@ -25,8 +27,7 @@ services:
         limits:
           memory: 4G
           cpus: "2.0"
-    command: >
-      python -m pytest tests/ -v --tb=short -x
+    command: python -m pyrobot.console
 
 volumes:
   bot-data:

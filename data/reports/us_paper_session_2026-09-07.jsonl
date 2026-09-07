@@ -1,0 +1,2 @@
+{"ts": "2026-09-07T13:35:02.068841+00:00", "event": "session_start", "mode": "smoke", "symbols": ["AAPL", "AMZN", "GOOGL", "JNJ", "JPM", "META", "MSFT", "NVDA", "WMT", "XOM"]}
+{"ts": "2026-09-07T13:35:06.230894+00:00", "event": "session_end", "status": "completed"}

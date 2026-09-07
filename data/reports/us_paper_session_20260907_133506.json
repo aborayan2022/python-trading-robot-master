@@ -1,0 +1,73 @@
+{
+  "title": "US Paper Daily Session \u2014 USTrendFollowStrategy (Alpaca paper)",
+  "generated_at": "2026-09-07T13:35:02.068626+00:00",
+  "session_date": "2026-09-07",
+  "status": "completed",
+  "symbols": [
+    "AAPL",
+    "AMZN",
+    "GOOGL",
+    "JNJ",
+    "JPM",
+    "META",
+    "MSFT",
+    "NVDA",
+    "WMT",
+    "XOM"
+  ],
+  "mode": "smoke",
+  "seeded": {
+    "AAPL": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "AMZN": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "GOOGL": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "JNJ": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "JPM": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "META": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "MSFT": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "NVDA": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "WMT": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    },
+    "XOM": {
+      "source": "alpaca",
+      "bars": 300,
+      "cached": false
+    }
+  },
+  "sector_map_coverage": "10/10",
+  "pipeline_ok": true
+}
