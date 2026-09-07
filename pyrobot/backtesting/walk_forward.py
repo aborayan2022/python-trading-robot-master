@@ -100,14 +100,46 @@ class WalkForwardValidator:
             test_idx = np.where(test_mask)[0]
 
             # Bar-level purging: drop training rows whose index position is within
-            # purge_bars of test_start.  This prevents label leakage when the
-            # label horizon extends beyond the calendar embargo gap.
-            # Purging is by bar count (not calendar days) so it works correctly
-            # for both daily and intraday data.
+            # purge_bars of test_start.  For cross-sectional MultiIndex data,
+            # calculate the window independently for each symbol because each
+            # symbol has its own bar sequence.
             if self.purge_bars > 0 and len(train_idx) > 0 and len(test_idx) > 0:
-                test_start_pos = test_idx[0]
-                purge_boundary = test_start_pos - self.purge_bars
-                train_idx = train_idx[train_idx < purge_boundary]
+                if isinstance(df.index, pd.MultiIndex):
+                    symbol_level = "symbol" if "symbol" in df.index.names else 0
+                    symbols = np.asarray(df.index.get_level_values(symbol_level))
+                    timestamps_array = np.asarray(timestamps)
+                    kept_train_idx: List[int] = []
+
+                    for symbol in np.unique(symbols[test_idx]):
+                        symbol_test_idx = test_idx[symbols[test_idx] == symbol]
+                        symbol_train_idx = train_idx[symbols[train_idx] == symbol]
+                        if len(symbol_test_idx) == 0 or len(symbol_train_idx) == 0:
+                            continue
+
+                        symbol_test_start = timestamps_array[symbol_test_idx].min()
+                        prior_symbol_idx = np.flatnonzero(
+                            (symbols == symbol) & (timestamps_array < symbol_test_start)
+                        )
+                        prior_symbol_idx = prior_symbol_idx[
+                            np.argsort(timestamps_array[prior_symbol_idx])
+                        ]
+                        if len(prior_symbol_idx) < self.purge_bars:
+                            continue
+
+                        purge_boundary_time = timestamps_array[
+                            prior_symbol_idx[-self.purge_bars]
+                        ]
+                        kept_train_idx.extend(
+                            int(index)
+                            for index in symbol_train_idx
+                            if timestamps_array[index] < purge_boundary_time
+                        )
+
+                    train_idx = np.asarray(sorted(kept_train_idx), dtype=int)
+                else:
+                    test_start_pos = test_idx[0]
+                    purge_boundary = test_start_pos - self.purge_bars
+                    train_idx = train_idx[train_idx < purge_boundary]
 
             yield WalkForwardSplit(
                 fold_index=i,

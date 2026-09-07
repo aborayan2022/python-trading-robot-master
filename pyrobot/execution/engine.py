@@ -574,6 +574,12 @@ class ExecutionEngine:
             equity=getattr(self, "_risk_equity", 0.0),
         )
         if not decision.approved:
+            # Terminal REJECTED, never left in NEW: an order rejected pre-trade
+            # must not linger as active and consume the concurrent-order budget.
+            self._order_manager.mark_rejected(
+                order.client_order_id,
+                reason=decision.reason,
+            )
             self._audit_ledger.record(
                 action=AuditAction.ORDER_REJECTED,
                 symbol=order.symbol,

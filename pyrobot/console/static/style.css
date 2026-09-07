@@ -51,6 +51,11 @@ body {
 
 .font-mono {
   font-family: var(--font-mono);
+  /* Numeric/monospace content (prices, percentages, IDs) must keep LTR
+     direction even in the Arabic RTL layout, otherwise "$1,000.00" and
+     "+0.00%" render mirrored ("1,000.00$"). */
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .text-muted {

@@ -45,6 +45,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
+from dotenv import load_dotenv
+
 from pyrobot.data.alpaca import AlpacaDataProvider, is_us_equity_session
 from pyrobot.runtime.loop import (
     TradingLoop,
@@ -89,6 +91,7 @@ def _save_report(payload: Dict[str, Any]) -> Path:
 
 
 def main() -> None:
+    load_dotenv()
     opts = _parse_args(sys.argv[1:])
     symbols = opts["symbols"]
     bars = opts["bars"]

@@ -347,10 +347,12 @@ def create_api_router(supervisor: RuntimeSupervisor, settings_manager: Optional[
         supervisor.config.allow_live_trading = True
         return {"status": "ok", "message": msg}
 
-    # ── Settings & Theme (MANAGER only) ───────────────────────────────────────
+    # ── Settings & Theme ─────────────────────────────────────────────────────
+    # GET is VIEWER+: theme/branding is cosmetic and needed to render the
+    # console for every role. Writes stay MANAGER-only.
 
     @router.get("/settings/theme")
-    def get_theme(_role: ConsoleRole = Depends(require_role(ConsoleRole.MANAGER))) -> Dict[str, Any]:
+    def get_theme(_role: ConsoleRole = Depends(require_role(ConsoleRole.VIEWER))) -> Dict[str, Any]:
         return _settings.get().to_dict()
 
     @router.put("/settings/theme")

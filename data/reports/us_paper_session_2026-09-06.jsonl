@@ -1,0 +1,123 @@
+{"ts": "2026-09-06T21:37:08.241973+00:00", "event": "session_start", "mode": "smoke", "symbols": ["AAPL", "AMZN", "GOOGL", "JNJ", "JPM", "META", "MSFT", "NVDA", "WMT", "XOM"]}
+{"ts": "2026-09-06T21:37:51.904442+00:00", "event": "session_start", "mode": "smoke", "symbols": ["AAPL", "AMZN", "GOOGL", "JNJ", "JPM", "META", "MSFT", "NVDA", "WMT", "XOM"]}
+{"ts": "2026-09-06T21:37:55.381401+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-06T21:38:00.116619+00:00", "event": "session_start", "mode": "dry-run", "symbols": ["AAPL", "AMZN", "GOOGL", "JNJ", "JPM", "META", "MSFT", "NVDA", "WMT", "XOM"]}
+{"ts": "2026-09-06T21:38:01.026311+00:00", "event": "seeding", "symbol": "AAPL"}
+{"ts": "2026-09-06T21:38:01.756637+00:00", "event": "seeded", "symbol": "AAPL", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:01.756836+00:00", "event": "seeding", "symbol": "AMZN"}
+{"ts": "2026-09-06T21:38:01.934769+00:00", "event": "seeded", "symbol": "AMZN", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:01.934980+00:00", "event": "seeding", "symbol": "GOOGL"}
+{"ts": "2026-09-06T21:38:02.116107+00:00", "event": "seeded", "symbol": "GOOGL", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:02.116321+00:00", "event": "seeding", "symbol": "JNJ"}
+{"ts": "2026-09-06T21:38:02.304060+00:00", "event": "seeded", "symbol": "JNJ", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:02.304315+00:00", "event": "seeding", "symbol": "JPM"}
+{"ts": "2026-09-06T21:38:02.488636+00:00", "event": "seeded", "symbol": "JPM", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:02.488874+00:00", "event": "seeding", "symbol": "META"}
+{"ts": "2026-09-06T21:38:02.695586+00:00", "event": "seeded", "symbol": "META", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:02.695813+00:00", "event": "seeding", "symbol": "MSFT"}
+{"ts": "2026-09-06T21:38:02.927277+00:00", "event": "seeded", "symbol": "MSFT", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:02.927540+00:00", "event": "seeding", "symbol": "NVDA"}
+{"ts": "2026-09-06T21:38:03.112454+00:00", "event": "seeded", "symbol": "NVDA", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:03.112708+00:00", "event": "seeding", "symbol": "WMT"}
+{"ts": "2026-09-06T21:38:03.297829+00:00", "event": "seeded", "symbol": "WMT", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:03.298143+00:00", "event": "seeding", "symbol": "XOM"}
+{"ts": "2026-09-06T21:38:03.479037+00:00", "event": "seeded", "symbol": "XOM", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:03.696176+00:00", "event": "positions_synced", "positions": {}}
+{"ts": "2026-09-06T21:38:07.829268+00:00", "event": "signal", "symbol": "AAPL", "action": "BUY", "reason": "Uptrend: close 319.95 > SMA200 (284.11), EMA21 > EMA50, RSI 53.6 in [45,75], ATR% 2.54%"}
+{"ts": "2026-09-06T21:38:07.829473+00:00", "event": "signal", "symbol": "AMZN", "action": "BUY", "reason": "Uptrend: close 258.40 > SMA200 (239.29), EMA21 > EMA50, RSI 47.5 in [45,75], ATR% 2.34%"}
+{"ts": "2026-09-06T21:38:07.829661+00:00", "event": "signal", "symbol": "GOOGL", "action": "HOLD", "reason": "No signal: close=338.34 sma=336.20 ema_f=343.07 ema_s=347.45 rsi=43.2 atr%=2.07% holding=False"}
+{"ts": "2026-09-06T21:38:07.829853+00:00", "event": "signal", "symbol": "JNJ", "action": "BUY", "reason": "Uptrend: close 275.24 > SMA200 (236.20), EMA21 > EMA50, RSI 61.1 in [45,75], ATR% 1.77%"}
+{"ts": "2026-09-06T21:38:07.830017+00:00", "event": "signal", "symbol": "JPM", "action": "BUY", "reason": "Uptrend: close 358.48 > SMA200 (318.63), EMA21 > EMA50, RSI 53.5 in [45,75], ATR% 1.67%"}
+{"ts": "2026-09-06T21:38:07.830180+00:00", "event": "signal", "symbol": "META", "action": "HOLD", "reason": "No signal: close=616.75 sma=622.38 ema_f=586.63 ema_s=590.80 rsi=76.1 atr%=2.97% holding=False"}
+{"ts": "2026-09-06T21:38:07.830356+00:00", "event": "signal", "symbol": "MSFT", "action": "BUY", "reason": "Uptrend: close 499.55 > SMA200 (431.05), EMA21 > EMA50, RSI 53.1 in [45,75], ATR% 2.26%"}
+{"ts": "2026-09-06T21:38:07.830530+00:00", "event": "signal", "symbol": "NVDA", "action": "BUY", "reason": "Uptrend: close 230.19 > SMA200 (196.92), EMA21 > EMA50, RSI 64.3 in [45,75], ATR% 3.13%"}
+{"ts": "2026-09-06T21:38:07.830715+00:00", "event": "signal", "symbol": "WMT", "action": "HOLD", "reason": "No signal: close=107.14 sma=118.70 ema_f=107.99 ema_s=111.10 rsi=49.9 atr%=2.22% holding=False"}
+{"ts": "2026-09-06T21:38:07.830904+00:00", "event": "signal", "symbol": "XOM", "action": "HOLD", "reason": "No signal: close=159.46 sma=144.94 ema_f=159.90 ema_s=156.03 rsi=44.7 atr%=1.93% holding=False"}
+{"ts": "2026-09-06T21:38:17.832322+00:00", "event": "order_status", "client_order_id": "c5618266-b2cc-4025-a7e2-dd8dff0fc5c7", "symbol": "AAPL", "side": "BUY", "status": "SUBMITTED"}
+{"ts": "2026-09-06T21:38:17.832599+00:00", "event": "order_status", "client_order_id": "57a03523-f741-4585-8aa3-99607d383855", "symbol": "AMZN", "side": "BUY", "status": "SUBMITTED"}
+{"ts": "2026-09-06T21:38:17.832813+00:00", "event": "order_status", "client_order_id": "693967f1-97ea-45ce-8226-4707c69a169e", "symbol": "JNJ", "side": "BUY", "status": "SUBMITTED"}
+{"ts": "2026-09-06T21:38:17.833011+00:00", "event": "order_status", "client_order_id": "e9d72260-27c0-4b66-9fea-3e7029426935", "symbol": "JPM", "side": "BUY", "status": "SUBMITTED"}
+{"ts": "2026-09-06T21:38:17.833203+00:00", "event": "order_status", "client_order_id": "fc67960a-7a0f-4ad2-8337-4a7fb1c66843", "symbol": "MSFT", "side": "BUY", "status": "SUBMITTED"}
+{"ts": "2026-09-06T21:38:17.833389+00:00", "event": "order_status", "client_order_id": "b862e9e8-d603-4858-b701-07c88910a224", "symbol": "NVDA", "side": "BUY", "status": "SUBMITTED"}
+{"ts": "2026-09-06T21:38:17.833605+00:00", "event": "session_end", "status": "completed", "equity": 100000.0, "orders": ["BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED"]}
+{"ts": "2026-09-06T21:38:17.837312+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-06T21:38:42.687498+00:00", "event": "session_start", "mode": "dry-run", "symbols": ["AAPL", "AMZN", "GOOGL", "JNJ", "JPM", "META", "MSFT", "NVDA", "WMT", "XOM"]}
+{"ts": "2026-09-06T21:38:43.603169+00:00", "event": "seeding", "symbol": "AAPL"}
+{"ts": "2026-09-06T21:38:44.382758+00:00", "event": "seeded", "symbol": "AAPL", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:44.383074+00:00", "event": "seeding", "symbol": "AMZN"}
+{"ts": "2026-09-06T21:38:44.561582+00:00", "event": "seeded", "symbol": "AMZN", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:44.561859+00:00", "event": "seeding", "symbol": "GOOGL"}
+{"ts": "2026-09-06T21:38:44.740236+00:00", "event": "seeded", "symbol": "GOOGL", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:44.740414+00:00", "event": "seeding", "symbol": "JNJ"}
+{"ts": "2026-09-06T21:38:44.918695+00:00", "event": "seeded", "symbol": "JNJ", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:44.918920+00:00", "event": "seeding", "symbol": "JPM"}
+{"ts": "2026-09-06T21:38:45.116366+00:00", "event": "seeded", "symbol": "JPM", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:45.116587+00:00", "event": "seeding", "symbol": "META"}
+{"ts": "2026-09-06T21:38:45.294038+00:00", "event": "seeded", "symbol": "META", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:45.294315+00:00", "event": "seeding", "symbol": "MSFT"}
+{"ts": "2026-09-06T21:38:45.487363+00:00", "event": "seeded", "symbol": "MSFT", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:45.487623+00:00", "event": "seeding", "symbol": "NVDA"}
+{"ts": "2026-09-06T21:38:45.665436+00:00", "event": "seeded", "symbol": "NVDA", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:45.665654+00:00", "event": "seeding", "symbol": "WMT"}
+{"ts": "2026-09-06T21:38:45.845882+00:00", "event": "seeded", "symbol": "WMT", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:45.846079+00:00", "event": "seeding", "symbol": "XOM"}
+{"ts": "2026-09-06T21:38:46.107020+00:00", "event": "seeded", "symbol": "XOM", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:38:46.310642+00:00", "event": "positions_synced", "positions": {}}
+{"ts": "2026-09-06T21:38:50.225882+00:00", "event": "signal", "symbol": "AAPL", "action": "BUY", "reason": "Uptrend: close 319.95 > SMA200 (284.11), EMA21 > EMA50, RSI 53.6 in [45,75], ATR% 2.54%"}
+{"ts": "2026-09-06T21:38:50.226119+00:00", "event": "signal", "symbol": "AMZN", "action": "BUY", "reason": "Uptrend: close 258.40 > SMA200 (239.29), EMA21 > EMA50, RSI 47.5 in [45,75], ATR% 2.34%"}
+{"ts": "2026-09-06T21:38:50.226317+00:00", "event": "signal", "symbol": "GOOGL", "action": "HOLD", "reason": "No signal: close=338.34 sma=336.20 ema_f=343.07 ema_s=347.45 rsi=43.2 atr%=2.07% holding=False"}
+{"ts": "2026-09-06T21:38:50.226523+00:00", "event": "signal", "symbol": "JNJ", "action": "BUY", "reason": "Uptrend: close 275.24 > SMA200 (236.20), EMA21 > EMA50, RSI 61.1 in [45,75], ATR% 1.77%"}
+{"ts": "2026-09-06T21:38:50.226710+00:00", "event": "signal", "symbol": "JPM", "action": "BUY", "reason": "Uptrend: close 358.48 > SMA200 (318.63), EMA21 > EMA50, RSI 53.5 in [45,75], ATR% 1.67%"}
+{"ts": "2026-09-06T21:38:50.226912+00:00", "event": "signal", "symbol": "META", "action": "HOLD", "reason": "No signal: close=616.75 sma=622.38 ema_f=586.63 ema_s=590.80 rsi=76.1 atr%=2.97% holding=False"}
+{"ts": "2026-09-06T21:38:50.227095+00:00", "event": "signal", "symbol": "MSFT", "action": "BUY", "reason": "Uptrend: close 499.55 > SMA200 (431.05), EMA21 > EMA50, RSI 53.1 in [45,75], ATR% 2.26%"}
+{"ts": "2026-09-06T21:38:50.227283+00:00", "event": "signal", "symbol": "NVDA", "action": "BUY", "reason": "Uptrend: close 230.19 > SMA200 (196.92), EMA21 > EMA50, RSI 64.3 in [45,75], ATR% 3.13%"}
+{"ts": "2026-09-06T21:38:50.227480+00:00", "event": "signal", "symbol": "WMT", "action": "HOLD", "reason": "No signal: close=107.14 sma=118.70 ema_f=107.99 ema_s=111.10 rsi=49.9 atr%=2.22% holding=False"}
+{"ts": "2026-09-06T21:38:50.227697+00:00", "event": "signal", "symbol": "XOM", "action": "HOLD", "reason": "No signal: close=159.46 sma=144.94 ema_f=159.90 ema_s=156.03 rsi=44.7 atr%=1.93% holding=False"}
+{"ts": "2026-09-06T21:38:50.228028+00:00", "event": "order_status", "client_order_id": "155b22c4-3389-48ad-8e41-88615c5f84e8", "symbol": "AAPL", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:38:50.228249+00:00", "event": "order_status", "client_order_id": "cb094757-2b28-4bea-bf5b-114c9fbe81a5", "symbol": "AMZN", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:38:50.228452+00:00", "event": "order_status", "client_order_id": "277e1e40-ba5c-4ea3-9bec-62728497fd81", "symbol": "JNJ", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:38:50.228593+00:00", "event": "order_status", "client_order_id": "034108a6-0bbe-4591-ba8d-64d2de52fc84", "symbol": "JPM", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:38:50.228800+00:00", "event": "order_status", "client_order_id": "26bf5779-af80-43b4-b32a-c0f70f5880e8", "symbol": "MSFT", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:38:50.228983+00:00", "event": "order_status", "client_order_id": "d7cbb52b-74bf-4867-8413-b90f825f2f30", "symbol": "NVDA", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:38:50.229188+00:00", "event": "session_end", "status": "completed", "equity": 100000.0, "orders": ["BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED"]}
+{"ts": "2026-09-06T21:38:50.232816+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-06T21:41:22.734121+00:00", "event": "session_start", "mode": "dry-run", "symbols": ["AAPL", "AMZN", "GOOGL", "JNJ", "JPM", "META", "MSFT", "NVDA", "WMT", "XOM"]}
+{"ts": "2026-09-06T21:41:23.772065+00:00", "event": "seeding", "symbol": "AAPL"}
+{"ts": "2026-09-06T21:41:24.972459+00:00", "event": "seeded", "symbol": "AAPL", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:24.972698+00:00", "event": "seeding", "symbol": "AMZN"}
+{"ts": "2026-09-06T21:41:25.511189+00:00", "event": "seeded", "symbol": "AMZN", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:25.511419+00:00", "event": "seeding", "symbol": "GOOGL"}
+{"ts": "2026-09-06T21:41:25.783151+00:00", "event": "seeded", "symbol": "GOOGL", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:25.783339+00:00", "event": "seeding", "symbol": "JNJ"}
+{"ts": "2026-09-06T21:41:26.282342+00:00", "event": "seeded", "symbol": "JNJ", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:26.282551+00:00", "event": "seeding", "symbol": "JPM"}
+{"ts": "2026-09-06T21:41:26.880249+00:00", "event": "seeded", "symbol": "JPM", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:26.880487+00:00", "event": "seeding", "symbol": "META"}
+{"ts": "2026-09-06T21:41:27.386715+00:00", "event": "seeded", "symbol": "META", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:27.386944+00:00", "event": "seeding", "symbol": "MSFT"}
+{"ts": "2026-09-06T21:41:27.762380+00:00", "event": "seeded", "symbol": "MSFT", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:27.762663+00:00", "event": "seeding", "symbol": "NVDA"}
+{"ts": "2026-09-06T21:41:27.989936+00:00", "event": "seeded", "symbol": "NVDA", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:27.990200+00:00", "event": "seeding", "symbol": "WMT"}
+{"ts": "2026-09-06T21:41:28.212129+00:00", "event": "seeded", "symbol": "WMT", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:28.212385+00:00", "event": "seeding", "symbol": "XOM"}
+{"ts": "2026-09-06T21:41:28.395293+00:00", "event": "seeded", "symbol": "XOM", "bars": 300, "source": "alpaca"}
+{"ts": "2026-09-06T21:41:28.601349+00:00", "event": "positions_synced", "positions": {}}
+{"ts": "2026-09-06T21:41:33.648692+00:00", "event": "signal", "symbol": "AAPL", "action": "BUY", "reason": "Uptrend: close 319.95 > SMA200 (284.11), EMA21 > EMA50, RSI 53.6 in [45,75], ATR% 2.54%"}
+{"ts": "2026-09-06T21:41:33.648865+00:00", "event": "signal", "symbol": "AMZN", "action": "BUY", "reason": "Uptrend: close 258.40 > SMA200 (239.29), EMA21 > EMA50, RSI 47.5 in [45,75], ATR% 2.34%"}
+{"ts": "2026-09-06T21:41:33.649004+00:00", "event": "signal", "symbol": "GOOGL", "action": "HOLD", "reason": "No signal: close=338.34 sma=336.20 ema_f=343.07 ema_s=347.45 rsi=43.2 atr%=2.07% holding=False"}
+{"ts": "2026-09-06T21:41:33.649136+00:00", "event": "signal", "symbol": "JNJ", "action": "BUY", "reason": "Uptrend: close 275.24 > SMA200 (236.20), EMA21 > EMA50, RSI 61.1 in [45,75], ATR% 1.77%"}
+{"ts": "2026-09-06T21:41:33.649280+00:00", "event": "signal", "symbol": "JPM", "action": "BUY", "reason": "Uptrend: close 358.48 > SMA200 (318.63), EMA21 > EMA50, RSI 53.5 in [45,75], ATR% 1.67%"}
+{"ts": "2026-09-06T21:41:33.649434+00:00", "event": "signal", "symbol": "META", "action": "HOLD", "reason": "No signal: close=616.75 sma=622.38 ema_f=586.63 ema_s=590.80 rsi=76.1 atr%=2.97% holding=False"}
+{"ts": "2026-09-06T21:41:33.649566+00:00", "event": "signal", "symbol": "MSFT", "action": "BUY", "reason": "Uptrend: close 499.55 > SMA200 (431.05), EMA21 > EMA50, RSI 53.1 in [45,75], ATR% 2.26%"}
+{"ts": "2026-09-06T21:41:33.649723+00:00", "event": "signal", "symbol": "NVDA", "action": "BUY", "reason": "Uptrend: close 230.19 > SMA200 (196.92), EMA21 > EMA50, RSI 64.3 in [45,75], ATR% 3.13%"}
+{"ts": "2026-09-06T21:41:33.649863+00:00", "event": "signal", "symbol": "WMT", "action": "HOLD", "reason": "No signal: close=107.14 sma=118.70 ema_f=107.99 ema_s=111.10 rsi=49.9 atr%=2.22% holding=False"}
+{"ts": "2026-09-06T21:41:33.649981+00:00", "event": "signal", "symbol": "XOM", "action": "HOLD", "reason": "No signal: close=159.46 sma=144.94 ema_f=159.90 ema_s=156.03 rsi=44.7 atr%=1.93% holding=False"}
+{"ts": "2026-09-06T21:41:33.650235+00:00", "event": "order_status", "client_order_id": "fe4ea7b0-2ef5-46f9-8c38-8b66e48b76ec", "symbol": "AAPL", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:41:33.650374+00:00", "event": "order_status", "client_order_id": "9e92d3a9-8a4c-43b4-b3e9-b06db227fd2a", "symbol": "AMZN", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:41:33.650511+00:00", "event": "order_status", "client_order_id": "ecebf2de-9620-4ccf-9769-8d4520aa7f06", "symbol": "JNJ", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:41:33.650674+00:00", "event": "order_status", "client_order_id": "46e637ec-bf66-41ae-919a-91bd446b05b5", "symbol": "JPM", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:41:33.650839+00:00", "event": "order_status", "client_order_id": "13f68e1c-cce1-4a18-852e-a5cf6b37bed1", "symbol": "MSFT", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:41:33.650979+00:00", "event": "order_status", "client_order_id": "0135dfb7-99e1-4879-8795-7b56d25dbf80", "symbol": "NVDA", "side": "BUY", "status": "SUBMITTED", "broker_status": null, "filled_quantity": 0.0, "avg_fill_price": 0.0}
+{"ts": "2026-09-06T21:41:33.651160+00:00", "event": "session_end", "status": "completed", "equity": 100000.0, "orders": ["BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED", "BUY:SUBMITTED"]}
+{"ts": "2026-09-06T21:41:33.654829+00:00", "event": "session_end", "status": "completed"}

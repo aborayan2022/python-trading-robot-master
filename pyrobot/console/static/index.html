@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PyRobot Management Console — غرفة قيادة المدير</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -109,7 +109,7 @@
               <span class="metric-icon">📉</span>
             </div>
             <div class="metric-value font-mono" id="card-drawdown">0.00%</div>
-            <div class="metric-footer text-muted" id="card-max-dd-sub">Daily Loss: 0.00%</div>
+            <div class="metric-footer text-muted" id="card-max-dd-sub">Bars Processed: 0</div>
           </div>
 
           <div class="metric-card card-risk">
@@ -315,6 +315,32 @@
                 <input type="number" id="cfg-balance" class="form-control font-mono" value="100000" min="1000">
               </div>
 
+              <div class="form-group">
+                <label data-i18n="lbl_n_bars">عدد الأشرطة</label>
+                <input type="number" id="cfg-n-bars" class="form-control font-mono" value="500" min="1">
+              </div>
+
+              <div class="form-group">
+                <label data-i18n="lbl_seed">البذرة العشوائية</label>
+                <input type="number" id="cfg-seed" class="form-control font-mono" value="42">
+              </div>
+
+              <div class="form-group">
+                <label data-i18n="lbl_mode">وضع التشغيل</label>
+                <select id="cfg-mode" class="form-control">
+                  <option value="paper">Paper</option>
+                  <option value="backtest">Backtest</option>
+                  <option value="live">Live (Locked)</option>
+                </select>
+              </div>
+
+              <div class="form-group form-checkbox">
+                <label>
+                  <input type="checkbox" id="cfg-dry-run" checked>
+                  <span data-i18n="lbl_dry_run">تشغيل جاف (Dry Run)</span>
+                </label>
+              </div>
+
               <div class="form-actions">
                 <button type="submit" class="btn btn-primary" id="btn-save-config">
                   💾 <span data-i18n="btn_apply_config">تطبيق وإعادة التشغيل الرشيقة</span>
@@ -332,22 +358,22 @@
             <form id="limits-form" class="form-grid">
               <div class="form-group">
                 <label data-i18n="lbl_max_pos_pct">أقصى حجم للمركز الواحد (%)</label>
-                <input type="number" id="limit-max-pos" class="form-control font-mono" step="0.01" min="0.01" max="1.0"
+                <input type="number" id="limit-max-pos" class="form-control font-mono" step="any" min="0.01" max="1.0"
                   value="0.10">
               </div>
               <div class="form-group">
                 <label data-i18n="lbl_max_dd_pct">الحد الأقصى للتراجع الكلي (%)</label>
-                <input type="number" id="limit-max-dd" class="form-control font-mono" step="0.01" min="0.01" max="0.50"
+                <input type="number" id="limit-max-dd" class="form-control font-mono" step="any" min="0.01" max="0.50"
                   value="0.15">
               </div>
               <div class="form-group">
                 <label data-i18n="lbl_max_daily_loss">الحد الأقصى للخسارة اليومية (%)</label>
-                <input type="number" id="limit-daily-loss" class="form-control font-mono" step="0.01" min="0.01"
+                <input type="number" id="limit-daily-loss" class="form-control font-mono" step="any" min="0.01"
                   max="0.20" value="0.03">
               </div>
               <div class="form-group">
                 <label data-i18n="lbl_stop_dist">المسافة الافتراضية لوقف الخسارة (%)</label>
-                <input type="number" id="limit-stop-dist" class="form-control font-mono" step="0.01" min="0.005"
+                <input type="number" id="limit-stop-dist" class="form-control font-mono" step="any" min="0.005"
                   max="0.20" value="0.02">
               </div>
               <div class="form-actions">
@@ -733,7 +759,7 @@
     <div class="toast-container" id="toast-container"></div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=3"></script>
 </body>
 
 </html>

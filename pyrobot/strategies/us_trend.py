@@ -129,6 +129,32 @@ class USTrendFollowStrategy(MultiSymbolStrategy):
         """Whether the strategy believes it holds this symbol."""
         return bool(self._holding.get(symbol, False))
 
+    def sync_positions(self, positions: Dict[str, float]) -> None:
+        """Synchronize holding state with a snapshot of broker positions.
+
+        Called at session startup so cross-session stop and sell exits work
+        correctly even when a position was opened in an earlier session (or
+        via a process other than this strategy). Position quantities are read
+        from the broker account; any quantity > 0 marks the symbol as held,
+        anything else clears the holding flag and trailing-stop state.
+
+        Args:
+            positions: symbol → quantity (per the broker account).
+        """
+        for symbol in self._symbols:
+            try:
+                qty = float(positions.get(symbol, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                qty = 0.0
+            self._holding[symbol] = qty > 0
+            if qty <= 0:
+                self._entry_high.pop(symbol, None)
+            self.set_symbol_state(symbol, "holding", qty > 0)
+            logger.info(
+                "USTrendFollowStrategy %s synced position for %s: qty=%s holding=%s",
+                self._strategy_id, symbol, qty, self._holding[symbol],
+            )
+
     # ── Rule evaluation ──────────────────────────────────────────────────────
 
     def _evaluate(self, symbol: str, stock_frame: StockFrame) -> Signal:

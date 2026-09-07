@@ -1,0 +1,171 @@
+{
+  "title": "US Paper Daily Session \u2014 USTrendFollowStrategy (Alpaca paper)",
+  "generated_at": "2026-09-06T21:38:00.116391+00:00",
+  "session_date": "2026-09-06",
+  "status": "completed",
+  "symbols": [
+    "AAPL",
+    "AMZN",
+    "GOOGL",
+    "JNJ",
+    "JPM",
+    "META",
+    "MSFT",
+    "NVDA",
+    "WMT",
+    "XOM"
+  ],
+  "mode": "dry-run",
+  "dry_run": true,
+  "audit_path": "/home/ahmed/worke/python-trading-robot-master/data/audit/us_paper_session_2026-09-06.jsonl",
+  "sector_map": {
+    "AAPL": "Information Technology",
+    "AMZN": "Consumer Discretionary",
+    "GOOGL": "Communication Services",
+    "JNJ": "Health Care",
+    "JPM": "Financials",
+    "META": "Communication Services",
+    "MSFT": "Information Technology",
+    "NVDA": "Information Technology",
+    "WMT": "Consumer Staples",
+    "XOM": "Energy"
+  },
+  "seeded": {
+    "AAPL": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "AMZN": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "GOOGL": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "JNJ": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "JPM": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "META": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "MSFT": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "NVDA": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "WMT": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "XOM": {
+      "source": "alpaca",
+      "bars": 300
+    }
+  },
+  "positions_synced": {},
+  "current_daily_candle": {
+    "AAPL": {
+      "close": 319.95,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "AMZN": {
+      "close": 258.4,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "GOOGL": {
+      "close": 338.34,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "JNJ": {
+      "close": 275.24,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "JPM": {
+      "close": 358.48,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "META": {
+      "close": 616.75,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "MSFT": {
+      "close": 499.55,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "NVDA": {
+      "close": 230.19,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "WMT": {
+      "close": 107.14,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "XOM": {
+      "close": 159.46,
+      "date": "2026-09-04T04:00:00+00:00"
+    }
+  },
+  "process_result": {
+    "timestamp": "2026-09-04T04:00:00+00:00",
+    "bar_index": 1,
+    "equity": 100000.0,
+    "kill_switch_active": false
+  },
+  "orders_settled": [
+    {
+      "client_order_id": "c5618266-b2cc-4025-a7e2-dd8dff0fc5c7",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "error": "Failed to get order status from Alpaca: badly formed hexadecimal UUID string"
+    },
+    {
+      "client_order_id": "57a03523-f741-4585-8aa3-99607d383855",
+      "symbol": "AMZN",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "error": "Failed to get order status from Alpaca: badly formed hexadecimal UUID string"
+    },
+    {
+      "client_order_id": "693967f1-97ea-45ce-8226-4707c69a169e",
+      "symbol": "JNJ",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "error": "Failed to get order status from Alpaca: badly formed hexadecimal UUID string"
+    },
+    {
+      "client_order_id": "e9d72260-27c0-4b66-9fea-3e7029426935",
+      "symbol": "JPM",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "error": "Failed to get order status from Alpaca: badly formed hexadecimal UUID string"
+    },
+    {
+      "client_order_id": "fc67960a-7a0f-4ad2-8337-4a7fb1c66843",
+      "symbol": "MSFT",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "error": "Failed to get order status from Alpaca: badly formed hexadecimal UUID string"
+    },
+    {
+      "client_order_id": "b862e9e8-d603-4858-b701-07c88910a224",
+      "symbol": "NVDA",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "error": "Failed to get order status from Alpaca: badly formed hexadecimal UUID string"
+    }
+  ],
+  "orders_count": 6,
+  "equity": 100000.0,
+  "positions": {}
+}

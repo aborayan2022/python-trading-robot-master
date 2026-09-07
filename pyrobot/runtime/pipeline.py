@@ -11,7 +11,7 @@ drift checks are recorded on the tamper-evident AuditLedger.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 
 import pandas as pd
 
@@ -19,6 +19,7 @@ from pyrobot.ai.drift import DriftDetector
 from pyrobot.ai.ensemble import EnsembleSignalEngine
 from pyrobot.audit.ledger import AuditAction, AuditLedger
 from pyrobot.brokers.base import BrokerInterface
+from pyrobot.data.base import Candle
 from pyrobot.exceptions import KillSwitchError
 from pyrobot.execution.engine import ExecutionEngine
 from pyrobot.execution.order_manager import OrderManager
@@ -63,6 +64,26 @@ def _as_stock_frame(frame: pd.DataFrame, symbol: str) -> "StockFrame":
     sf._symbol_groups = None
     sf._symbol_rolling_groups = None
     return sf
+
+
+def _bar_timestamp(bar: dict) -> datetime:
+    """Normalize a bar's ``datetime`` to a timezone-aware UTC datetime."""
+    ts = bar.get("datetime")
+    if ts is None:
+        return datetime.now(timezone.utc)
+    parsed: pd.Timestamp = pd.Timestamp(ts)
+    if parsed.tzinfo is None:
+        parsed = parsed.tz_localize("UTC")
+    return cast(datetime, parsed.astimezone(timezone.utc).to_pydatetime())
+
+
+def _normalize_bar(bar) -> dict:
+    """Coerce a Candle (or dict) bar into a plain OHLCV dict."""
+    if hasattr(bar, "to_dict"):
+        bar = bar.to_dict()
+    out = dict(bar)
+    out.setdefault("datetime", datetime.now(timezone.utc))
+    return out
 
 
 class TradingPipeline:
@@ -146,6 +167,40 @@ class TradingPipeline:
         self._last_symbol_bar_at: Dict[str, datetime] = {}
 
     # ── Public API ────────────────────────────────────────────────────────────
+
+    def seed_history(self, seed_bars: Dict[str, List[Candle | dict]]) -> Dict[str, int]:
+        """Warm up in-memory history without generating signals or orders.
+
+        Live daily sessions call this once at startup with ~300 daily bars per
+        symbol so strategies with long indicator warm-ups (SMA-200, 210-bar
+        minimums) can evaluate on the first ``process_bar`` call. Seeding only
+        populates ``self._history`` — it never produces signals, orders, risk
+        decisions, or audit entries.
+
+        Bars may be supplied as ``Candle`` objects or OHLCV dicts. They are
+        sorted ascending by timestamp, deduplicated (last observation wins),
+        and capped to ``history_window``.
+
+        Args:
+            seed_bars: symbol → list of bars (Candle or OHLCV dict).
+
+        Returns:
+            Symbol → number of bars seeded (before dedup/capping).
+        """
+        seeded: Dict[str, int] = {}
+        for symbol, bars in seed_bars.items():
+            clean: List[dict] = [_normalize_bar(b) for b in bars]
+            if not clean:
+                seeded[symbol] = 0
+                continue
+            combined = list(self._history.get(symbol, [])) + clean
+            combined.sort(key=_bar_timestamp)
+            deduped: Dict[datetime, dict] = {}
+            for row in combined:
+                deduped[_bar_timestamp(row)] = row
+            self._history[symbol] = list(deduped.values())[-self.history_window:]
+            seeded[symbol] = len(clean)
+        return seeded
 
     def process_bar(self, bars: Dict[str, dict], timestamp: Optional[datetime] = None) -> dict:
         """Process one bar per symbol through the full pipeline.

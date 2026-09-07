@@ -58,6 +58,10 @@
       lbl_symbols: "الرموز (مفصولة بفاصلة)",
       lbl_signal_source: "مصدر الإشارات (Signal Source)",
       lbl_bar_interval: "الفاصل الزمني بين الأشرطة (ثوان)",
+      lbl_n_bars: "عدد الأشرطة",
+      lbl_seed: "البذرة العشوائية",
+      lbl_mode: "وضع التشغيل",
+      lbl_dry_run: "تشغيل جاف (Dry Run)",
       lbl_balance: "رأس المال الأولي ($)",
       btn_apply_config: "تطبيق وإعادة التشغيل الرشيقة",
       ctrl_risk_limits_title: "حدود وإدارة المخاطر (Risk Limits)",
@@ -107,6 +111,8 @@
       th_strategy: "الاستراتيجية",
       th_backtest_return: "العائد",
       th_sharpe: "Sharpe",
+      th_max_dd: "أقصى تراجع",
+      th_trades: "صفقات",
       th_reports_count: "عدد",
       report_empty: "لا توجد بيانات بعد.",
       report_no_data: "لا توجد بيانات كافية لتوليد تقرير بعد.",
@@ -167,6 +173,10 @@
       lbl_symbols: "Symbols (comma-separated)",
       lbl_signal_source: "Signal Source",
       lbl_bar_interval: "Bar Interval (seconds)",
+      lbl_n_bars: "Number of Bars",
+      lbl_seed: "Random Seed",
+      lbl_mode: "Run Mode",
+      lbl_dry_run: "Dry Run",
       lbl_balance: "Initial Cash Balance ($)",
       btn_apply_config: "Apply & Graceful Restart",
       ctrl_risk_limits_title: "Risk Limits Management",
@@ -216,6 +226,8 @@
       th_strategy: "Strategy",
       th_backtest_return: "Return",
       th_sharpe: "Sharpe",
+      th_max_dd: "Max Drawdown",
+      th_trades: "Trades",
       th_reports_count: "Count",
       report_empty: "No data yet.",
       report_no_data: "Not enough data to produce a report yet.",
@@ -252,7 +264,7 @@
     currentRoleText: document.getElementById('current-role-text'),
     streamStatus: document.getElementById('stream-status'),
     streamStatusText: document.getElementById('stream-status-text'),
-    
+
     // Overview Cards
     cardStatePill: document.getElementById('card-state-pill'),
     cardStateValue: document.getElementById('card-state-value'),
@@ -267,7 +279,7 @@
     dataFreshnessVal: document.getElementById('data-freshness-val'),
     chartBarsCount: document.getElementById('chart-bars-count'),
     equityCanvas: document.getElementById('equityCanvas'),
-    
+
     // Signals & Tables
     signalsList: document.getElementById('signals-stream-list'),
     signalsCount: document.getElementById('signals-count'),
@@ -275,7 +287,7 @@
     positionsCount: document.getElementById('positions-count'),
     ordersTbody: document.getElementById('orders-tbody'),
     ordersCount: document.getElementById('orders-count'),
-    
+
     // Controls
     controlRoleWarning: document.getElementById('control-role-warning'),
     ctrlStateBadge: document.getElementById('ctrl-state-badge'),
@@ -286,7 +298,7 @@
     btnCtrlStop: document.getElementById('btn-ctrl-stop'),
     btnKillActivate: document.getElementById('btn-kill-activate'),
     btnKillReset: document.getElementById('btn-kill-reset'),
-    
+
     // Forms
     configForm: document.getElementById('config-form'),
     cfgProfile: document.getElementById('cfg-profile'),
@@ -294,6 +306,10 @@
     cfgSource: document.getElementById('cfg-source'),
     cfgInterval: document.getElementById('cfg-interval'),
     cfgBalance: document.getElementById('cfg-balance'),
+    cfgNBars: document.getElementById('cfg-n-bars'),
+    cfgSeed: document.getElementById('cfg-seed'),
+    cfgMode: document.getElementById('cfg-mode'),
+    cfgDryRun: document.getElementById('cfg-dry-run'),
     limitsForm: document.getElementById('limits-form'),
     limitMaxPos: document.getElementById('limit-max-pos'),
     limitMaxDd: document.getElementById('limit-max-dd'),
@@ -303,7 +319,7 @@
     livePhraseInput: document.getElementById('live-phrase-input'),
     liveStepTwoCheck: document.getElementById('live-step-two-check'),
     liveGateEnvStatus: document.getElementById('live-gate-env-status'),
-    
+
     // Theme & Branding
     themeForm: document.getElementById('theme-form'),
     themePlatformName: document.getElementById('theme-platform-name'),
@@ -313,7 +329,7 @@
     themeAccentColor: document.getElementById('theme-accent-color'),
     themeBgPrimary: document.getElementById('theme-bg-primary'),
     btnResetTheme: document.getElementById('btn-reset-theme'),
-    
+
     // Audit
     auditTbody: document.getElementById('audit-tbody'),
     auditActionFilter: document.getElementById('audit-action-filter'),
@@ -333,13 +349,14 @@
     reportsTradesTbody: document.getElementById('reports-trades-tbody'),
     reportsBacktestsTbody: document.getElementById('reports-backtests-tbody'),
     rptBacktestsCount: document.getElementById('rpt-backtests-count'),
-    
+
     // Modals
     modalBackdrop: document.getElementById('modal-backdrop'),
     loginModal: document.getElementById('login-modal'),
     loginForm: document.getElementById('login-form'),
     loginTokenInput: document.getElementById('login-token-input'),
     loginModalClose: document.getElementById('login-modal-close'),
+    confirmModalClose: document.getElementById('confirm-modal-close'),
     confirmModal: document.getElementById('confirm-modal'),
     confirmModalTitle: document.getElementById('confirm-modal-title'),
     confirmModalMessage: document.getElementById('confirm-modal-message'),
@@ -384,6 +401,9 @@
   }
 
   // ── API Helpers ───────────────────────────────────────────────────────────
+  // `options.silent` suppresses the auto-login-modal for background loads
+  // (polling, initial data, theme) so anonymous viewers are not hijacked by
+  // repeated 401 responses. User-initiated actions keep the modal behavior.
   async function apiFetch(endpoint, options = {}) {
     const defaultHeaders = {
       'Content-Type': 'application/json',
@@ -393,7 +413,7 @@
         ...options,
         headers: { ...defaultHeaders, ...(options.headers || {}) },
       });
-      if (res.status === 401) {
+      if (res.status === 401 && !options.silent) {
         openLoginModal();
       }
       return res;
@@ -423,6 +443,13 @@
     return fallbackText;
   }
 
+  async function refreshAuthoritativeOverview() {
+    const res = await apiFetch('/api/overview', { silent: true });
+    if (res.ok) {
+      updateOverviewUI(await res.json());
+    }
+  }
+
   // ── Tab Management ────────────────────────────────────────────────────────
   function initTabs() {
     dom.tabBtns.forEach((btn) => {
@@ -442,10 +469,21 @@
     });
   }
 
+  // Re-fetch data for whichever pane is currently visible (used after login
+  // so role-gated panels fill in without forcing a manual page reload).
+  function refreshActiveTabData() {
+    const active = document.querySelector('.tab-btn.active');
+    const tab = active ? active.getAttribute('data-tab') : 'overview';
+    if (tab === 'audit') loadAuditLogs();
+    if (tab === 'control') { loadRiskLimits(); loadEngineConfig(); }
+    if (tab === 'reports') loadReports();
+    refreshAuthoritativeOverview();
+  }
+
   // ── Authentication & Roles ────────────────────────────────────────────────
   async function checkAuth() {
     try {
-      const res = await apiFetch('/api/auth/me');
+      const res = await apiFetch('/api/auth/me', { silent: true });
       if (res.ok) {
         const data = await res.json();
         state.role = data.role;
@@ -617,7 +655,16 @@
       renderEquityChart();
     }
 
-    // Refresh child tables
+    // Refresh child tables (throttled — SSE pushes every ~2s and each message
+    // would otherwise trigger three API calls in a row).
+    refreshChildTables();
+  }
+
+  let childTablesLastFetch = 0;
+  function refreshChildTables(force = false) {
+    const now = Date.now();
+    if (!force && now - childTablesLastFetch < 2000) return;
+    childTablesLastFetch = now;
     loadPositions();
     loadOrders();
     loadSignals();
@@ -710,7 +757,7 @@
   // ── Tables Loading ────────────────────────────────────────────────────────
   async function loadPositions() {
     try {
-      const res = await apiFetch('/api/positions');
+      const res = await apiFetch('/api/positions', { silent: true });
       if (!res.ok) return;
       const positions = await res.json();
       dom.positionsCount.textContent = positions.length;
@@ -735,12 +782,12 @@
           </tr>
         `;
       }).join('');
-    } catch {}
+    } catch { }
   }
 
   async function loadOrders() {
     try {
-      const res = await apiFetch('/api/orders');
+      const res = await apiFetch('/api/orders', { silent: true });
       if (!res.ok) return;
       const orders = await res.json();
       dom.ordersCount.textContent = orders.length;
@@ -765,12 +812,12 @@
           </tr>
         `;
       }).join('');
-    } catch {}
+    } catch { }
   }
 
   async function loadSignals() {
     try {
-      const res = await apiFetch('/api/signals?limit=15');
+      const res = await apiFetch('/api/signals?limit=15', { silent: true });
       if (!res.ok) return;
       const signals = await res.json();
       dom.signalsCount.textContent = signals.length;
@@ -798,7 +845,7 @@
           </div>
         `;
       }).join('');
-    } catch {}
+    } catch { }
   }
 
   // ── Audit Logs ────────────────────────────────────────────────────────────
@@ -806,7 +853,7 @@
     try {
       const filter = dom.auditActionFilter ? dom.auditActionFilter.value : '';
       const url = filter ? `/api/audit?action=${encodeURIComponent(filter)}&limit=50` : '/api/audit?limit=50';
-      const res = await apiFetch(url);
+      const res = await apiFetch(url, { silent: true });
       if (!res.ok) {
         dom.auditTbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Permission denied (DEV/MANAGER role required)</td></tr>`;
         return;
@@ -831,27 +878,28 @@
           </tr>
         `;
       }).join('');
-    } catch {}
+    } catch { }
   }
 
   // ── Risk Limits & Configuration ───────────────────────────────────────────
   async function loadRiskLimits() {
     try {
-      const res = await apiFetch('/api/control/risk-limits');
+      const res = await apiFetch('/api/control/risk-limits', { silent: true });
       if (res.ok) {
         const limits = await res.json();
-        dom.limitMaxPos.value = limits.max_position_size_pct || 0.10;
-        dom.limitMaxDd.value = limits.max_portfolio_drawdown_pct || 0.15;
-        dom.limitDailyLoss.value = limits.daily_loss_limit_pct || 0.03;
-        dom.limitStopDist.value = limits.default_stop_distance_pct || 0.02;
+        // Field names follow the RiskLimits schema returned by the server.
+        dom.limitMaxPos.value = limits.max_position_size_pct ?? 0.10;
+        dom.limitMaxDd.value = limits.max_drawdown_pct ?? 0.15;
+        dom.limitDailyLoss.value = limits.max_daily_loss_pct ?? 0.03;
+        dom.limitStopDist.value = limits.default_stop_distance_pct ?? 0.02;
       }
-    } catch {}
+    } catch { }
   }
 
   // Prefill the engine config form from the persisted config (Manager).
   async function loadEngineConfig() {
     try {
-      const res = await apiFetch('/api/control/config');
+      const res = await apiFetch('/api/control/config', { silent: true });
       if (!res.ok) return;
       const cfg = await res.json();
       if (cfg.profile) dom.cfgProfile.value = cfg.profile;
@@ -859,7 +907,11 @@
       if (cfg.signal_source) dom.cfgSource.value = cfg.signal_source;
       if (cfg.bar_interval) dom.cfgInterval.value = cfg.bar_interval;
       if (cfg.initial_balance) dom.cfgBalance.value = cfg.initial_balance;
-    } catch {}
+      if (cfg.n_bars !== undefined) dom.cfgNBars.value = cfg.n_bars;
+      if (cfg.seed !== undefined) dom.cfgSeed.value = cfg.seed;
+      if (cfg.mode) dom.cfgMode.value = cfg.mode;
+      if (cfg.dry_run !== undefined) dom.cfgDryRun.checked = cfg.dry_run;
+    } catch { }
   }
 
   // ── Trading Operations Reports ────────────────────────────────────────────
@@ -883,12 +935,12 @@
 
   async function loadPerformanceReport() {
     try {
-      const res = await apiFetch('/api/reports/performance');
+      const res = await apiFetch('/api/reports/performance', { silent: true });
       if (!res.ok) return;
       const report = await res.json();
       state.lastPerformanceReport = report;
       renderPerformanceReport(report);
-    } catch {}
+    } catch { }
   }
 
   function renderPerformanceReport(report) {
@@ -1055,11 +1107,11 @@
 
   async function loadBacktests() {
     try {
-      const res = await apiFetch('/api/reports/backtests');
+      const res = await apiFetch('/api/reports/backtests', { silent: true });
       if (!res.ok) return;
       const data = await res.json();
       renderBacktests(data.reports || []);
-    } catch {}
+    } catch { }
   }
 
   function renderBacktests(reports) {
@@ -1121,11 +1173,12 @@
         body: JSON.stringify({ token }),
       });
       if (res.ok) {
-        showToast('Login successful', 'success');
+        showToast(state.lang === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Login successful', 'success');
         closeModals();
         await checkAuth();
+        refreshActiveTabData();
       } else {
-        showToast('Invalid access token', 'error');
+        showToast(state.lang === 'ar' ? 'رمز وصول غير صالح' : 'Invalid access token', 'error');
       }
     });
 
@@ -1143,6 +1196,7 @@
       const res = await apiFetch('/api/control/start', { method: 'POST' });
       if (res.ok) {
         showToast(state.lang === 'ar' ? 'تم تشغيل المحرك' : 'Engine started', 'success');
+        await refreshAuthoritativeOverview();
       } else {
         showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر تشغيل المحرك' : 'Failed to start engine'), 'error');
       }
@@ -1152,6 +1206,7 @@
       const res = await apiFetch('/api/control/pause', { method: 'POST' });
       if (res.ok) {
         showToast(state.lang === 'ar' ? 'تم إيقاف المحرك مؤقتاً' : 'Engine paused', 'warning');
+        await refreshAuthoritativeOverview();
       } else {
         showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر الإيقاف المؤقت' : 'Failed to pause engine'), 'error');
       }
@@ -1161,6 +1216,7 @@
       const res = await apiFetch('/api/control/resume', { method: 'POST' });
       if (res.ok) {
         showToast(state.lang === 'ar' ? 'تم استئناف المحرك' : 'Engine resumed', 'success');
+        await refreshAuthoritativeOverview();
       } else {
         showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر الاستئناف' : 'Failed to resume engine'), 'error');
       }
@@ -1174,6 +1230,7 @@
           const res = await apiFetch('/api/control/stop', { method: 'POST' });
           if (res.ok) {
             showToast(state.lang === 'ar' ? 'تم إيقاف المحرك برشاقة' : 'Engine stopped gracefully', 'info');
+            await refreshAuthoritativeOverview();
           } else {
             showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر إيقاف المحرك' : 'Failed to stop engine'), 'error');
           }
@@ -1193,6 +1250,7 @@
           });
           if (res.ok) {
             showToast(state.lang === 'ar' ? 'تم تفعيل مفتاح الطوارئ' : 'Kill switch activated!', 'error');
+            await refreshAuthoritativeOverview();
           } else {
             showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر تفعيل مفتاح الطوارئ' : 'Failed to activate kill switch'), 'error');
           }
@@ -1211,6 +1269,7 @@
           });
           if (res.ok) {
             showToast(state.lang === 'ar' ? 'تم إعادة ضبط مفتاح الطوارئ' : 'Kill switch reset', 'success');
+            await refreshAuthoritativeOverview();
           } else {
             showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر إعادة الضبط' : 'Failed to reset kill switch'), 'error');
           }
@@ -1226,7 +1285,11 @@
         symbols: dom.cfgSymbols.value.split(',').map((s) => s.trim().toUpperCase()),
         signal_source: dom.cfgSource.value,
         bar_interval: parseFloat(dom.cfgInterval.value),
+        n_bars: parseInt(dom.cfgNBars.value, 10),
+        seed: parseInt(dom.cfgSeed.value, 10),
         initial_balance: parseFloat(dom.cfgBalance.value),
+        mode: dom.cfgMode.value,
+        dry_run: dom.cfgDryRun.checked,
       };
       const res = await apiFetch('/api/control/config', {
         method: 'POST',
@@ -1234,6 +1297,9 @@
       });
       if (res.ok) {
         showToast(state.lang === 'ar' ? 'تم تطبيق الإعدادات مع إعادة تشغيل رشيقة' : 'Configuration applied with graceful restart', 'success');
+        await loadEngineConfig();
+        const overviewRes = await apiFetch('/api/overview', { silent: true });
+        if (overviewRes.ok) updateOverviewUI(await overviewRes.json());
       } else {
         showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر تطبيق الإعدادات' : 'Failed to apply configuration'), 'error');
       }
@@ -1242,10 +1308,11 @@
     // Risk Limits Form Submit
     dom.limitsForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      // Server RiskLimits schema: max_drawdown_pct / max_daily_loss_pct.
       const payload = {
         max_position_size_pct: parseFloat(dom.limitMaxPos.value),
-        max_portfolio_drawdown_pct: parseFloat(dom.limitMaxDd.value),
-        daily_loss_limit_pct: parseFloat(dom.limitDailyLoss.value),
+        max_drawdown_pct: parseFloat(dom.limitMaxDd.value),
+        max_daily_loss_pct: parseFloat(dom.limitDailyLoss.value),
         default_stop_distance_pct: parseFloat(dom.limitStopDist.value),
       };
       const res = await apiFetch('/api/control/risk-limits', {
@@ -1254,6 +1321,7 @@
       });
       if (res.ok) {
         showToast(state.lang === 'ar' ? 'تم حفظ حدود المخاطر بعد التحقق' : 'Risk limits validated and saved', 'success');
+        await refreshAuthoritativeOverview();
       } else {
         showToast(await formatApiError(res, state.lang === 'ar' ? 'تعذر حفظ حدود المخاطر' : 'Failed to save risk limits'), 'error');
       }
@@ -1273,8 +1341,7 @@
         dom.liveGateEnvStatus.textContent = 'UNLOCKED';
         dom.liveGateEnvStatus.className = 'badge badge-success font-mono';
       } else {
-        const err = await res.json();
-        showToast(err.detail || 'Live unlock rejected', 'error');
+        showToast(await formatApiError(res, state.lang === 'ar' ? 'تم رفض فتح التداول الحي' : 'Live unlock rejected'), 'error');
       }
     });
 
@@ -1332,7 +1399,7 @@
   // ── Theme & Branding ─────────────────────────────────────────────────────
   async function loadAndApplyTheme() {
     try {
-      const res = await apiFetch('/api/settings/theme');
+      const res = await apiFetch('/api/settings/theme', { silent: true });
       if (!res.ok) return;
       const data = await res.json();
       const root = document.documentElement;

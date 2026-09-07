@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
+from dotenv import load_dotenv
 
 from pyrobot.ai.drift import DriftDetector
 from pyrobot.ai.ensemble import EnsembleSignalEngine
@@ -34,6 +35,7 @@ from pyrobot.audit.ledger import AuditAction, AuditLedger
 from pyrobot.brokers.alpaca_broker import AlpacaBroker
 from pyrobot.brokers.paper_broker import PaperBroker
 from pyrobot.data.alpaca import AlpacaDataProvider
+from pyrobot.data.sectors import US_EQUITY_GICS_SECTORS
 from pyrobot.exceptions import StaleDataError
 from pyrobot.logging_config import get_logger
 from pyrobot.monitoring import RuntimeMetrics
@@ -254,6 +256,8 @@ def build_alpaca_pipeline(
     audit_path: Optional[str] = None,
     strategy: Optional[BaseStrategy] = None,
     ensemble: Optional[EnsembleSignalEngine] = None,
+    dry_run: bool = False,
+    sector_map: Optional[Dict[str, str]] = None,
 ) -> TradingPipeline:
     """Assemble the Alpaca production-paper pipeline.
 
@@ -279,8 +283,11 @@ def build_alpaca_pipeline(
         symbols=symbols,
         signal_source=source,
         audit_ledger=ledger,
-        dry_run=False,
-        risk_manager=RiskManager(limits=RiskLimits.conservative()),
+        dry_run=dry_run,
+        risk_manager=RiskManager(
+            limits=RiskLimits.conservative(),
+            sector_map=sector_map or US_EQUITY_GICS_SECTORS,
+        ),
     )
 
 
@@ -302,6 +309,7 @@ def _signal_source_from_env(symbols: List[str]) -> EnsembleSignalEngine | BaseSt
 
 def main() -> None:
     """Console entrypoint: paper replay demo driven by environment variables."""
+    load_dotenv()
     symbols = [s.strip().upper() for s in os.environ.get("PYROBOT_SYMBOLS", "MSFT,AAPL").split(",") if s.strip()]
     n_bars = int(os.environ.get("PYROBOT_BARS", "500"))
     seed = int(os.environ.get("PYROBOT_SEED", "7"))

@@ -1,0 +1,183 @@
+{
+  "title": "US Paper Daily Session \u2014 USTrendFollowStrategy (Alpaca paper)",
+  "generated_at": "2026-09-06T21:41:22.733907+00:00",
+  "session_date": "2026-09-06",
+  "status": "completed",
+  "symbols": [
+    "AAPL",
+    "AMZN",
+    "GOOGL",
+    "JNJ",
+    "JPM",
+    "META",
+    "MSFT",
+    "NVDA",
+    "WMT",
+    "XOM"
+  ],
+  "mode": "dry-run",
+  "dry_run": true,
+  "audit_path": "/home/ahmed/worke/python-trading-robot-master/data/audit/us_paper_session_2026-09-06.jsonl",
+  "sector_map": {
+    "AAPL": "Information Technology",
+    "AMZN": "Consumer Discretionary",
+    "GOOGL": "Communication Services",
+    "JNJ": "Health Care",
+    "JPM": "Financials",
+    "META": "Communication Services",
+    "MSFT": "Information Technology",
+    "NVDA": "Information Technology",
+    "WMT": "Consumer Staples",
+    "XOM": "Energy"
+  },
+  "seeded": {
+    "AAPL": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "AMZN": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "GOOGL": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "JNJ": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "JPM": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "META": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "MSFT": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "NVDA": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "WMT": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "XOM": {
+      "source": "alpaca",
+      "bars": 300
+    }
+  },
+  "positions_synced": {},
+  "current_daily_candle": {
+    "AAPL": {
+      "close": 319.95,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "AMZN": {
+      "close": 258.4,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "GOOGL": {
+      "close": 338.34,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "JNJ": {
+      "close": 275.24,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "JPM": {
+      "close": 358.48,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "META": {
+      "close": 616.75,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "MSFT": {
+      "close": 499.55,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "NVDA": {
+      "close": 230.19,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "WMT": {
+      "close": 107.14,
+      "date": "2026-09-04T04:00:00+00:00"
+    },
+    "XOM": {
+      "close": 159.46,
+      "date": "2026-09-04T04:00:00+00:00"
+    }
+  },
+  "process_result": {
+    "timestamp": "2026-09-04T04:00:00+00:00",
+    "bar_index": 1,
+    "equity": 100000.0,
+    "kill_switch_active": false
+  },
+  "orders_settled": [
+    {
+      "client_order_id": "fe4ea7b0-2ef5-46f9-8c38-8b66e48b76ec",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "broker_status": null,
+      "filled_quantity": 0.0,
+      "avg_fill_price": 0.0
+    },
+    {
+      "client_order_id": "9e92d3a9-8a4c-43b4-b3e9-b06db227fd2a",
+      "symbol": "AMZN",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "broker_status": null,
+      "filled_quantity": 0.0,
+      "avg_fill_price": 0.0
+    },
+    {
+      "client_order_id": "ecebf2de-9620-4ccf-9769-8d4520aa7f06",
+      "symbol": "JNJ",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "broker_status": null,
+      "filled_quantity": 0.0,
+      "avg_fill_price": 0.0
+    },
+    {
+      "client_order_id": "46e637ec-bf66-41ae-919a-91bd446b05b5",
+      "symbol": "JPM",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "broker_status": null,
+      "filled_quantity": 0.0,
+      "avg_fill_price": 0.0
+    },
+    {
+      "client_order_id": "13f68e1c-cce1-4a18-852e-a5cf6b37bed1",
+      "symbol": "MSFT",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "broker_status": null,
+      "filled_quantity": 0.0,
+      "avg_fill_price": 0.0
+    },
+    {
+      "client_order_id": "0135dfb7-99e1-4879-8795-7b56d25dbf80",
+      "symbol": "NVDA",
+      "side": "BUY",
+      "status": "SUBMITTED",
+      "broker_status": null,
+      "filled_quantity": 0.0,
+      "avg_fill_price": 0.0
+    }
+  ],
+  "orders_count": 6,
+  "equity": 100000.0,
+  "positions": {}
+}

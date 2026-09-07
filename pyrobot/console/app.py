@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,6 +47,10 @@ def create_app(supervisor: Optional[RuntimeSupervisor] = None, settings_path: Op
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Console assets must always be revalidated so managers never run a
+        # stale UI after a deployment (etag/last-modified still allow 304s).
+        if request.url.path.startswith("/static") or request.url.path == "/":
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     # Mount API routes
@@ -83,6 +88,7 @@ def main() -> None:
     """Console entrypoint: parses host/port, starts loop, and launches Uvicorn server."""
     import uvicorn
 
+    load_dotenv()
     host = os.environ.get("PYROBOT_CONSOLE_HOST", "127.0.0.1")
     port = int(os.environ.get("PYROBOT_CONSOLE_PORT", "8080"))
     auto_start = os.environ.get("PYROBOT_AUTO_START", "true").lower() == "true"

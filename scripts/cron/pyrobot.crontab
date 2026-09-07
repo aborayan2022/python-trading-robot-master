@@ -1,0 +1,15 @@
+# PyRobot scheduled jobs — installed 2026-09-07
+# System timezone is Africa/Cairo (EEST, UTC+3); all times below are Cairo.
+# Cron environment is minimal: every job cd's to the repo root and uses the
+# absolute venv python so .env + data paths resolve from the repo.
+
+# --- Weekly research session (item 2.4): every Saturday 10:00 ---
+0 10 * * 6 cd /home/ahmed/worke/python-trading-robot-master && .venv/bin/python scripts/weekly_research.py >> data/cron/weekly_research.log 2>&1
+
+# --- One-off live paper sessions for Monday 2026-09-07 (item 3.3.2) ---
+# Smoke at market open (~16:35 Cairo = 09:35 ET)
+35 16 7 9 * cd /home/ahmed/worke/python-trading-robot-master && .venv/bin/python us_paper_session.py --smoke >> data/cron/us_paper_smoke_2026-09-07.log 2>&1
+# Full session near close (~22:40 Cairo = 15:40 ET, inside the pre-close window)
+40 22 7 9 * cd /home/ahmed/worke/python-trading-robot-master && .venv/bin/python us_paper_session.py >> data/cron/us_paper_session_2026-09-07.log 2>&1
+
+# Remove the two date-qualified 2026-09-07 lines after the sessions have run.

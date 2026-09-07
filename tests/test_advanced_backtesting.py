@@ -232,6 +232,42 @@ class TestWalkForwardPurge:
                     f"index {test_start_pos} (boundary={purge_boundary})"
                 )
 
+    def test_multiindex_purge_is_per_symbol(self):
+        """Each symbol loses its own final purge window before the test fold."""
+        dates = pd.date_range("2023-01-01", periods=50, freq="B")
+        index = pd.MultiIndex.from_product(
+            [["AAPL", "MSFT"], dates], names=["symbol", "timestamp"]
+        )
+        X = pd.DataFrame({"f1": np.arange(len(index), dtype=float)}, index=index)
+
+        validator = WalkForwardValidator(
+            n_splits=2,
+            train_period_days=15,
+            test_period_days=5,
+            embargo_days=1,
+            purge_bars=3,
+        )
+
+        split = next(validator.split(X))
+        train_symbols = X.index.get_level_values("symbol")[split.train_indices]
+        train_times = X.index.get_level_values("timestamp")[split.train_indices]
+        test_symbols = X.index.get_level_values("symbol")[split.test_indices]
+        test_times = X.index.get_level_values("timestamp")[split.test_indices]
+
+        for symbol in ["AAPL", "MSFT"]:
+            test_start = test_times[test_symbols == symbol].min()
+            all_prior_times = sorted(
+                test_times[(test_symbols == symbol) & (test_times < test_start)].tolist()
+                + X.index.get_level_values("timestamp")[
+                    (X.index.get_level_values("symbol") == symbol)
+                    & (X.index.get_level_values("timestamp") < test_start)
+                ].tolist()
+            )
+            purge_window = set(all_prior_times[-3:])
+            assert not purge_window.intersection(
+                train_times[train_symbols == symbol].tolist()
+            )
+
     def test_purge_prevents_leak_inflation(self):
         """A leak-prone pattern shows inflated OOS without purge, accurate OOS with purge.
 
