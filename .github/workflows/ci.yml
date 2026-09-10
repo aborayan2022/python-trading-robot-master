@@ -27,6 +27,43 @@ jobs:
         run: |
           pytest tests/ -v
 
+  multi-market-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies (incl. ml extras for strat tests)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Every backtest must run cleanly in --dry-run (cache-only, no network).
+      - name: Backtest dry-runs for all markets
+        run: |
+          for bt in backtest_us_mean_reversion.py backtest_us_breakout.py \
+                    backtest_metals_trend.py backtest_metals_momentum.py \
+                    backtest_crypto_trend.py backtest_crypto_mean_rev.py; do
+            echo "::group::$bt"
+            python "$bt" --dry-run || exit 1
+            echo "::endgroup::"
+          done
+
+      # Every paper session must pass a smoke check (cached data + wiring).
+      - name: Paper session smokes (metals + crypto)
+        run: |
+          python metals_paper_session.py --smoke || exit 1
+          python crypto_paper_session.py --smoke || exit 1
+
+      - name: Run full test suite
+        run: |
+          pytest tests/ -v
+
   test:
     runs-on: ubuntu-latest
     strategy:

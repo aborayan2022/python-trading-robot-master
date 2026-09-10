@@ -23,6 +23,10 @@ services:
       - PYROBOT_BALANCE=${PYROBOT_BALANCE:-100000}
       - PYROBOT_BAR_INTERVAL=${PYROBOT_BAR_INTERVAL:-1.0}
       - PYROBOT_AUDIT_PATH=/app/data/audit/ledger.jsonl
+      # Multi-market selection (Wave 1-4): us | metals | crypto
+      - PYROBOT_MARKET=${PYROBOT_MARKET:-us}
+      # Strategy selection via the StrategyRegistry factory (default us_trend)
+      - PYROBOT_STRATEGY=${PYROBOT_STRATEGY:-us_trend}
     ports:
       - "${PYROBOT_CONSOLE_PORT:-8080}:8080"
     volumes:

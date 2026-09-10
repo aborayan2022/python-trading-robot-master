@@ -1,0 +1,38 @@
+{
+  "title": "Metals Paper Session \u2014 MetalsTrendFollowStrategy (PaperBroker)",
+  "generated_at": "2026-09-09T23:06:09.003939+00:00",
+  "session_date": "2026-09-09",
+  "status": "completed",
+  "symbols": [
+    "GC=F",
+    "SI=F",
+    "GLD",
+    "SLV"
+  ],
+  "mode": "smoke",
+  "seeded": {
+    "GC=F": {
+      "source": "cache",
+      "bars": 300
+    },
+    "SI=F": {
+      "source": "cache",
+      "bars": 300
+    },
+    "GLD": {
+      "source": "cache",
+      "bars": 300
+    },
+    "SLV": {
+      "source": "cache",
+      "bars": 300
+    }
+  },
+  "pipeline_ok": true,
+  "trading_calendar": {
+    "name": "COMEX_Globex",
+    "hours": "Sun 18:00 \u2013 Fri 17:00 ET (23h/day)",
+    "closed": "Sat all day, Sun before 18:00 ET",
+    "timezone": "America/New_York"
+  }
+}

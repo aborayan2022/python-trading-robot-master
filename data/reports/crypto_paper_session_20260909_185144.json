@@ -1,0 +1,49 @@
+{
+  "title": "Crypto Paper Session \u2014 CryptoTrendBreakoutStrategy (PaperBroker)",
+  "generated_at": "2026-09-09T18:51:42.802019+00:00",
+  "session_date": "2026-09-09",
+  "status": "completed",
+  "symbols": [
+    "BTC-USD",
+    "ETH-USD"
+  ],
+  "mode": "now",
+  "dry_run": false,
+  "audit_path": "/home/ahmed/worke/python-trading-robot-master/data/audit/crypto_paper_session_2026-09-09.jsonl",
+  "trading_calendar": {
+    "name": "Crypto_24_7",
+    "hours": "24 hours / 7 days / 365 days",
+    "closed": "Never \u2014 no market close, no holidays",
+    "timezone": "UTC"
+  },
+  "seeded": {
+    "BTC-USD": {
+      "source": "cache",
+      "bars": 100
+    },
+    "ETH-USD": {
+      "source": "cache_missing",
+      "bars": 0
+    }
+  },
+  "current_daily_candle": {
+    "BTC-USD": {
+      "close": 31026.19,
+      "date": "2021-04-10T00:00:00+00:00"
+    },
+    "ETH-USD": {
+      "close": 2485.88,
+      "date": "2026-09-09T00:00:00+00:00"
+    }
+  },
+  "process_result": {
+    "timestamp": "2026-09-09T00:00:00+00:00",
+    "bar_index": 1,
+    "equity": 100000.0,
+    "kill_switch_active": false
+  },
+  "orders_settled": [],
+  "orders_count": 0,
+  "equity": 100000.0,
+  "positions": {}
+}

@@ -1,0 +1,67 @@
+{
+  "title": "Metals Paper Session \u2014 MetalsTrendFollowStrategy (PaperBroker)",
+  "generated_at": "2026-09-09T18:51:42.439564+00:00",
+  "session_date": "2026-09-09",
+  "status": "completed",
+  "symbols": [
+    "GC=F",
+    "SI=F",
+    "GLD",
+    "SLV"
+  ],
+  "mode": "now",
+  "dry_run": false,
+  "audit_path": "/home/ahmed/worke/python-trading-robot-master/data/audit/metals_paper_session_2026-09-09.jsonl",
+  "trading_calendar": {
+    "name": "COMEX_Globex",
+    "hours": "Sun 18:00 \u2013 Fri 17:00 ET (23h/day)",
+    "closed": "Sat all day, Sun before 18:00 ET",
+    "timezone": "America/New_York"
+  },
+  "seeded": {
+    "GC=F": {
+      "source": "cache",
+      "bars": 100
+    },
+    "SI=F": {
+      "source": "cache_missing",
+      "bars": 0
+    },
+    "GLD": {
+      "source": "cache_missing",
+      "bars": 0
+    },
+    "SLV": {
+      "source": "cache_missing",
+      "bars": 0
+    }
+  },
+  "current_daily_candle": {
+    "GC=F": {
+      "close": 1848.73,
+      "date": "2021-04-10T00:00:00+00:00"
+    },
+    "SI=F": {
+      "close": 68.33,
+      "date": "2026-09-09T04:00:00+00:00"
+    },
+    "GLD": {
+      "close": 404.02,
+      "date": "2026-09-09T04:00:00+00:00"
+    },
+    "SLV": {
+      "close": 60.99,
+      "date": "2026-09-09T04:00:00+00:00"
+    }
+  },
+  "process_result": {
+    "timestamp": "2026-09-09T04:00:00+00:00",
+    "bar_index": 1,
+    "equity": 100000.0,
+    "kill_switch_active": false
+  },
+  "orders_settled": [],
+  "orders_count": 0,
+  "equity": 100000.0,
+  "positions": {}
+}

@@ -373,10 +373,12 @@ class TestAuditTrailAndTelemetry:
 class TestConsoleSettingsTheme:
     """Theme/branding settings endpoints: RBAC, validation, persistence, reset."""
 
-    def test_get_theme_requires_manager(self, client):
+    def test_get_theme_is_viewer_plus(self, client):
+        # GET is deliberately VIEWER+ (theme/branding is cosmetic and needed to
+        # render the console; see pyrobot/console/api.py). Writes stay MANAGER-only.
         assert client.get("/api/settings/theme").status_code == 401
-        assert client.get("/api/settings/theme", headers=auth_headers("test-viewer-token")).status_code == 403
-        assert client.get("/api/settings/theme", headers=auth_headers("test-dev-token")).status_code == 403
+        assert client.get("/api/settings/theme", headers=auth_headers("test-viewer-token")).status_code == 200
+        assert client.get("/api/settings/theme", headers=auth_headers("test-dev-token")).status_code == 200
 
     def test_get_theme_returns_defaults(self, client):
         res = client.get("/api/settings/theme", headers=auth_headers("test-manager-token"))

@@ -150,3 +150,110 @@ Is extending our hand-written broker adapters the right path vs. building on a m
 **Impact on code:**
 - none — decision pending.
 
+---
+
+## 2026-09-09 — Precious Metals: market characteristics and data source
+
+**Question:** What are the characteristics of precious metals markets, and what
+data source should we use for backtesting and paper trading?
+
+**Sources:**
+- CME Group COMEX documentation (gold, silver futures specifications).
+- yfinance documentation for commodity futures tickers (GC=F, SI=F).
+- GLD (SPDR Gold Trust) and SLV (iShares Silver Trust) ETF prospectuses.
+
+**Findings:**
+- Gold (GC=F) and Silver (SI=F) futures trade on COMEX via Globex nearly 23h/day.
+- yfinance provides reliable daily OHLCV for GC=F, SI=F, GLD, SLV.
+- Metals are priced in USD — inverse correlation with dollar strength.
+- Volatility is regime-dependent: low in stable macro, high in crisis.
+- ETFs (GLD, SLV) provide simpler data handling vs. futures roll costs.
+
+**Comparison with our use case:**
+- Our existing `DataQualityEngine` handles daily OHLCV validation and can
+  work with metals data without modification.
+- Metals' ~23h trading window overlaps with US equity hours (9:30-16:00 ET),
+  so our existing timezone handling is compatible.
+
+**Decision / Lesson:**
+- Use yfinance for metals data (GC=F, SI=F, GLD, SLV) as primary source.
+- Store in `data/metals/` directory.
+- Include both futures and ETF tickers for robustness.
+- Write educational foundation in `docs/education/02_metals_foundations.md`.
+
+**Impact on code:**
+- `pyrobot/data/metals_provider.py` — new metals data provider.
+- `data/metals/` — new storage directory.
+- `docs/education/02_metals_foundations.md` — new educational document.
+
+---
+
+## 2026-09-09 — Cryptocurrency: market characteristics and data source
+
+**Question:** What are the characteristics of cryptocurrency markets, and what
+data source should we use for backtesting and paper trading?
+
+**Sources:**
+- Bitcoin and Ethereum market structure research.
+- yfinance documentation for crypto tickers (BTC-USD, ETH-USD).
+- CCXT library documentation for exchange connectivity.
+
+**Findings:**
+- Crypto trades 24/7/365 with no market close or holidays.
+- yfinance provides daily OHLCV for BTC-USD, ETH-USD (back to 2014 for BTC).
+- Crypto volatility is 2-5x that of equities — requires wider stops.
+- Market is younger (~15 years) — less historical data for regime analysis.
+- Correlation to equities has increased since 2020 (risk-on asset behavior).
+
+**Comparison with our use case:**
+- Our `TradingPipeline` and `TradingLoop` are timezone-agnostic — they work
+  with any daily bar sequence regardless of market hours.
+- yfinance data is sufficient for daily backtesting; CCXT would be needed
+  for intraday or real-time (future enhancement).
+
+**Decision / Lesson:**
+- Use yfinance for crypto data (BTC-USD, ETH-USD) as primary source.
+- Store in `data/crypto/` directory.
+- Plan for CCXT integration when moving to intraday timeframes.
+- Write educational foundation in `docs/education/03_crypto_foundations.md`.
+
+**Impact on code:**
+- `pyrobot/data/crypto_provider.py` — new crypto data provider.
+- `data/crypto/` — new storage directory.
+- `docs/education/03_crypto_foundations.md` — new educational document.
+
+---
+
+## 2026-09-09 — Multi-market strategy architecture: registry and factory pattern
+
+**Question:** How should we architect the strategy layer to support multiple
+markets and strategies without manual linking?
+
+**Sources:**
+- `pyrobot/strategies/base.py` — existing BaseStrategy/MultiSymbolStrategy.
+- `pyrobot/runtime/pipeline.py:34` — TradingPipeline accepts BaseStrategy.
+- Gang of Four: Factory Method pattern; Abstract Factory for product families.
+
+**Findings:**
+- Current design: `build_alpaca_pipeline` manually wires one strategy.
+- No registry: adding a new strategy requires editing the pipeline builder.
+- `TradingPipeline.signal_source` accepts `BaseStrategy | EnsembleSignalEngine`.
+- Strategy classes already follow a consistent interface (on_bar, on_order_fill).
+
+**Comparison with our use case:**
+- A StrategyRegistry with Factory Pattern would decouple strategy selection
+  from pipeline construction.
+- Environment variable selection (PYROBOT_STRATEGY) enables script-level
+  configuration without code changes.
+
+**Decision / Lesson:**
+- Create `pyrobot/strategies/registry.py` with StrategyRegistry class.
+- Each strategy module registers itself via `StrategyRegistry.register()`.
+- Pipeline builder uses `StrategyRegistry.create(name, symbols, params)`.
+- No manual linking required — adding a new strategy file is sufficient.
+
+**Impact on code:**
+- `pyrobot/strategies/registry.py` — new StrategyRegistry.
+- `pyrobot/strategies/__init__.py` — updated exports.
+- `pyrobot/runtime/pipeline.py` — optional: use registry for strategy creation.
+

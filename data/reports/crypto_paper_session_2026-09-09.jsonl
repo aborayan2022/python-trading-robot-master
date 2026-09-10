@@ -1,0 +1,14 @@
+{"ts": "2026-09-09T18:51:36.036151+00:00", "event": "session_start", "mode": "smoke", "symbols": ["BTC-USD", "ETH-USD"]}
+{"ts": "2026-09-09T18:51:36.113046+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-09T18:51:42.802177+00:00", "event": "session_start", "mode": "now", "symbols": ["BTC-USD", "ETH-USD"]}
+{"ts": "2026-09-09T18:51:42.880894+00:00", "event": "seeding", "symbol": "BTC-USD"}
+{"ts": "2026-09-09T18:51:42.892439+00:00", "event": "seeded", "symbol": "BTC-USD", "bars": 100, "source": "cache"}
+{"ts": "2026-09-09T18:51:42.892853+00:00", "event": "seeding", "symbol": "ETH-USD"}
+{"ts": "2026-09-09T18:51:42.893122+00:00", "event": "seeded", "symbol": "ETH-USD", "bars": 0, "source": "cache_missing"}
+{"ts": "2026-09-09T18:51:44.258657+00:00", "event": "signal", "symbol": "BTC-USD", "action": "HOLD", "reason": "No breakout: close=31026.19 high(20)=31026.19 low(20)=30736.80 atr=2163.69"}
+{"ts": "2026-09-09T18:51:44.258998+00:00", "event": "session_end", "status": "completed", "equity": 100000.0, "orders": []}
+{"ts": "2026-09-09T18:51:44.259333+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-09T22:08:56.290699+00:00", "event": "session_start", "mode": "smoke", "symbols": ["BTC-USD", "ETH-USD"]}
+{"ts": "2026-09-09T22:08:56.420222+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-09T23:06:09.596574+00:00", "event": "session_start", "mode": "smoke", "symbols": ["BTC-USD", "ETH-USD"]}
+{"ts": "2026-09-09T23:06:09.700017+00:00", "event": "session_end", "status": "completed"}

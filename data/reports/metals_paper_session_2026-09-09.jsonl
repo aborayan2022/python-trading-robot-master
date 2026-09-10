@@ -1,0 +1,18 @@
+{"ts": "2026-09-09T18:51:35.687565+00:00", "event": "session_start", "mode": "smoke", "symbols": ["GC=F", "SI=F", "GLD", "SLV"]}
+{"ts": "2026-09-09T18:51:35.768587+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-09T18:51:42.439758+00:00", "event": "session_start", "mode": "now", "symbols": ["GC=F", "SI=F", "GLD", "SLV"]}
+{"ts": "2026-09-09T18:51:42.541352+00:00", "event": "seeding", "symbol": "GC=F"}
+{"ts": "2026-09-09T18:51:42.548226+00:00", "event": "seeded", "symbol": "GC=F", "bars": 100, "source": "cache"}
+{"ts": "2026-09-09T18:51:42.548409+00:00", "event": "seeding", "symbol": "SI=F"}
+{"ts": "2026-09-09T18:51:42.548627+00:00", "event": "seeded", "symbol": "SI=F", "bars": 0, "source": "cache_missing"}
+{"ts": "2026-09-09T18:51:42.548761+00:00", "event": "seeding", "symbol": "GLD"}
+{"ts": "2026-09-09T18:51:42.548973+00:00", "event": "seeded", "symbol": "GLD", "bars": 0, "source": "cache_missing"}
+{"ts": "2026-09-09T18:51:42.549127+00:00", "event": "seeding", "symbol": "SLV"}
+{"ts": "2026-09-09T18:51:42.549328+00:00", "event": "seeded", "symbol": "SLV", "bars": 0, "source": "cache_missing"}
+{"ts": "2026-09-09T18:51:44.899415+00:00", "event": "signal", "symbol": "GC=F", "action": "HOLD", "reason": "No signal: close=1848.73 sma=1856.37 ema_f=1850.37 ema_s=1853.06 rsi=0.3"}
+{"ts": "2026-09-09T18:51:44.899662+00:00", "event": "session_end", "status": "completed", "equity": 100000.0, "orders": []}
+{"ts": "2026-09-09T18:51:44.899925+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-09T22:08:55.155934+00:00", "event": "session_start", "mode": "smoke", "symbols": ["GC=F", "SI=F", "GLD", "SLV"]}
+{"ts": "2026-09-09T22:08:55.396051+00:00", "event": "session_end", "status": "completed"}
+{"ts": "2026-09-09T23:06:09.004090+00:00", "event": "session_start", "mode": "smoke", "symbols": ["GC=F", "SI=F", "GLD", "SLV"]}
+{"ts": "2026-09-09T23:06:09.143657+00:00", "event": "session_end", "status": "completed"}

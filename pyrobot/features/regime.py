@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,85 @@ class RegimeState:
     trend_score: float
     volatility_score: float
     recommended_strategy_type: str
+
+
+# Regime → recommended strategy by market. These names are expected to exist in
+# StrategyRegistry; the matcher falls back to a per-market default when a name
+# is not registered.
+REGIME_STRATEGY_MAP: Dict[str, Dict[MarketRegime, str]] = {
+    "us": {
+        MarketRegime.BULL: "us_trend",
+        MarketRegime.BEAR: "us_mean_reversion",
+        MarketRegime.SIDEWAYS: "us_mean_reversion",
+        MarketRegime.HIGH_VOLATILITY: "us_breakout",
+        MarketRegime.CRISIS: "us_mean_reversion",
+    },
+    "metals": {
+        MarketRegime.BULL: "metals_trend",
+        MarketRegime.BEAR: "metals_momentum",
+        MarketRegime.SIDEWAYS: "metals_trend",
+        MarketRegime.HIGH_VOLATILITY: "metals_momentum",
+        MarketRegime.CRISIS: "metals_trend",
+    },
+    "crypto": {
+        MarketRegime.BULL: "crypto_trend",
+        MarketRegime.BEAR: "crypto_mean_reversion",
+        MarketRegime.SIDEWAYS: "crypto_mean_reversion",
+        MarketRegime.HIGH_VOLATILITY: "crypto_trend",
+        MarketRegime.CRISIS: "crypto_mean_reversion",
+    },
+}
+
+# Regime-specific position sizing: scale applied to the default position cap.
+REGIME_POSITION_SCALE: Dict[MarketRegime, float] = {
+    MarketRegime.BULL: 1.0,
+    MarketRegime.BEAR: 0.6,
+    MarketRegime.SIDEWAYS: 0.7,
+    MarketRegime.HIGH_VOLATILITY: 0.5,
+    MarketRegime.CRISIS: 0.25,
+}
+
+
+class RegimeStrategyMatcher:
+    """Links a detected regime to the most appropriate registered strategy.
+
+    Maps ``(market, regime)`` to a concrete strategy name via
+    ``REGIME_STRATEGY_MAP``, verifies it exists in ``StrategyRegistry`` and
+    returns the regime-specific position scale.
+    """
+
+    def __init__(self) -> None:
+        self._defaults = {
+            "us": "us_trend",
+            "metals": "metals_trend",
+            "crypto": "crypto_trend",
+        }
+
+    def recommended_strategy(self, market: str, regime: MarketRegime) -> Optional[str]:
+        """Return a registered strategy name for this market/regime (or None)."""
+        from pyrobot.strategies.registry import StrategyRegistry
+
+        name = REGIME_STRATEGY_MAP.get(market, {}).get(regime)
+        if name is None:
+            name = self._defaults.get(market)
+        if name is not None and name in StrategyRegistry.available():
+            return name
+        return None
+
+    def position_scale(self, regime: MarketRegime) -> float:
+        """Position-sizing multiplier for the given regime (0.25–1.0)."""
+        return REGIME_POSITION_SCALE.get(regime, 0.7)
+
+    def recommend(self, market: str, state: RegimeState) -> Dict[str, Any]:
+        """Full recommendation: strategy name + position scale for a regime."""
+        strategy = self.recommended_strategy(market, state.regime)
+        return {
+            "market": market,
+            "regime": state.regime.value,
+            "confidence": state.confidence,
+            "recommended_strategy": strategy,
+            "position_scale": self.position_scale(state.regime),
+        }
 
 
 class MarketRegimeDetector(BaseFeatureExtractor):

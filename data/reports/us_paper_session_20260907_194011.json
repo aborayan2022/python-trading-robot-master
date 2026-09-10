@@ -1,0 +1,77 @@
+{
+  "title": "US Paper Daily Session \u2014 USTrendFollowStrategy (Alpaca paper)",
+  "generated_at": "2026-09-07T19:40:03.123871+00:00",
+  "session_date": "2026-09-07",
+  "status": "market_closed",
+  "symbols": [
+    "AAPL",
+    "AMZN",
+    "GOOGL",
+    "JNJ",
+    "JPM",
+    "META",
+    "MSFT",
+    "NVDA",
+    "WMT",
+    "XOM"
+  ],
+  "mode": "auto",
+  "dry_run": false,
+  "audit_path": "/home/ahmed/worke/python-trading-robot-master/data/audit/us_paper_session_2026-09-07.jsonl",
+  "sector_map": {
+    "AAPL": "Information Technology",
+    "AMZN": "Consumer Discretionary",
+    "GOOGL": "Communication Services",
+    "JNJ": "Health Care",
+    "JPM": "Financials",
+    "META": "Communication Services",
+    "MSFT": "Information Technology",
+    "NVDA": "Information Technology",
+    "WMT": "Consumer Staples",
+    "XOM": "Energy"
+  },
+  "seeded": {
+    "AAPL": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "AMZN": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "GOOGL": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "JNJ": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "JPM": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "META": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "MSFT": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "NVDA": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "WMT": {
+      "source": "alpaca",
+      "bars": 300
+    },
+    "XOM": {
+      "source": "alpaca",
+      "bars": 300
+    }
+  },
+  "positions_synced": {},
+  "reason": "No daily bar stamped today (market closed / holiday)."
+}

@@ -3521,3 +3521,4 @@
 {"timestamp": "2026-01-05T22:47:00+00:00", "equity": 100374.15999999999, "drawdown": 0.009312197825354272, "positions": {"MSFT": 37.0}, "orders_count": 2, "rejected_orders": 0, "kill_switch_active": false, "model_risk_scale": 1.0, "open_orders": 0}
 {"timestamp": "2026-01-05T22:48:00+00:00", "equity": 100338.64, "drawdown": 0.009662778400406986, "positions": {"MSFT": 37.0}, "orders_count": 2, "rejected_orders": 0, "kill_switch_active": false, "model_risk_scale": 1.0, "open_orders": 0}
 {"timestamp": "2026-01-05T22:49:00+00:00", "equity": 100351.59, "drawdown": 0.009534962565752342, "positions": {"MSFT": 37.0}, "orders_count": 2, "rejected_orders": 0, "kill_switch_active": false, "model_risk_scale": 1.0, "open_orders": 0}
+{"timestamp": "2026-01-05T14:30:00+00:00", "equity": 100000.0, "drawdown": 0.0, "positions": {}, "orders_count": 0, "rejected_orders": 0, "kill_switch_active": false, "model_risk_scale": 1.0, "open_orders": 0}
