@@ -17,6 +17,8 @@ class CostModelConfig:
     sec_fee_rate: float = 0.0000278      # SEC transaction fee rate on sells
     market_impact_coefficient: float = 0.1 # Temporary price impact coefficient (Almgren-Chriss style)
     max_volume_participation: float = 0.10 # Maximum percentage of bar volume allowed to fill
+    borrow_annual_rate_pct: float = 1.0  # Annualized borrow/carry rate on open short
+                                         # positions (conservative blended equity/ETF rate).
 
 
 class ExecutionCostModel:
@@ -106,7 +108,26 @@ class ExecutionCostModel:
             "slippage_cost": round(slippage_impact * filled_qty, 4),
             "spread_cost": round(spread_impact * filled_qty, 4),
             "market_impact": round(market_impact * filled_qty, 4),
-            "total_commission": round(commission, 4),
-            "sec_fee": round(sec_fee, 4),
-            "total_cost": round(total_cost, 4),
-        }
+"total_commission": round(commission, 4),
+                "sec_fee": round(sec_fee, 4),
+                "total_cost": round(total_cost, 4),
+            }
+
+    def estimate_borrow_cost(self, notional_value: float, periods_per_year: int = 252) -> float:
+        """Per-bar estimated borrow/carry cost on an open short position.
+
+        A short position consumes borrowed shares; the lender charges a daily
+        borrow fee on the notional market value of the position. Because the
+        runner operates on daily bars, the annualized rate is prorated over the
+        number of bars per year (252 for equity/futures calendars, 365 for
+        24/7 crypto).
+
+        Args:
+            notional_value: Current market value of the short position
+                (absolute shares × current price).
+            periods_per_year: Bars per year for the market's trading calendar.
+
+        Returns:
+            The per-bar borrow cost in dollars.
+        """
+        return notional_value * (self.config.borrow_annual_rate_pct / 100.0) / periods_per_year

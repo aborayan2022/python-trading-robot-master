@@ -8,10 +8,11 @@ Environment:
     PYROBOT_SYMBOLS          comma-separated universe      (default MSFT,AAPL)
     PYROBOT_BARS             number of replay bars          (default 500)
     PYROBOT_SEED             replay RNG seed                (default 7)
-    PYROBOT_MODE             paper | dry_run                (default paper)
-    PYROBOT_BALANCE          initial cash                   (default 100000)
-    PYROBOT_AUDIT_PATH       audit ledger JSONL path        (default data/audit/ledger.jsonl)
-    PYROBOT_BAR_INTERVAL     seconds between bars           (default 0 = as fast as possible)
+PYROBOT_MODE            paper | dry_run                (default paper)
+    PYROBOT_BALANCE         initial cash                   (default 100000)
+    PYROBOT_AUDIT_PATH      audit ledger JSONL path        (default data/audit/ledger.jsonl)
+    PYROBOT_BAR_INTERVAL    seconds between bars           (default 0 = as fast as possible)
+    PYROBOT_STRATEGY        registered strategy name to run (default: none → signal source)
 
 The replay source is synthetic (deterministic random walk) so the loop runs
 anywhere with zero external dependencies — for live data, pass a bar provider
@@ -292,13 +293,24 @@ def build_alpaca_pipeline(
 
 
 def _signal_source_from_env(symbols: List[str]) -> EnsembleSignalEngine | BaseStrategy:
-    """Pick the demo signal source from PYROBOT_SIGNAL_SOURCE.
+    """Pick the loop signal source from environment variables.
 
-    'ensemble' (default): unfitted models — NO_TRADE unless real champion
-        models are registered; nothing trades by accident.
-    'example': the SMA-crossover ExampleStrategy — actually trades so the
-        loop demonstrates the full path (signals, fills, audit, exits).
+    Priority order:
+      PYROBOT_STRATEGY      any registered strategy name (via
+                            StrategyRegistry.create_from_env) — actually trades.
+      PYROBOT_SIGNAL_SOURCE 'ensemble' (default): unfitted models — NO_TRADE
+                            unless real champion models are registered; nothing
+                            trades by accident. 'example': the SMA-crossover
+                            ExampleStrategy — actually trades so the loop
+                            demonstrates the full path (signals, fills, audit,
+                            exits).
     """
+    strategy_name = os.environ.get("PYROBOT_STRATEGY")
+    if strategy_name:
+        from pyrobot.strategies.registry import StrategyRegistry
+
+        return StrategyRegistry.create_from_env(symbols=symbols)
+
     choice = os.environ.get("PYROBOT_SIGNAL_SOURCE", "ensemble").lower()
     if choice == "example":
         from pyrobot.strategies.base import ExampleStrategy

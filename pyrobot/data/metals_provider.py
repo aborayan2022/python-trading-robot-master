@@ -38,6 +38,18 @@ TRADING_CALENDAR = {
     "timezone": "America/New_York",
 }
 
+# Contract-roll note (Wave 5): yfinance returns the *front-month* continuous
+# series for GC=F / SI=F which back-adjusts prices across expirations. Daily
+# bars therefore embed roll jumps that are NOT yet handled (no explicit roll
+# adjustment or calendar-spread accounting). Acceptable for backtesting the
+# daily signal path, but a production metals book must reconcile against the
+# quoted front-month expiry. Tracked in:
+#   reports/decision_memo_metals.md §6
+CONTRACT_ROLL_NOTE = (
+    "Front-month continuous futures (GC=F/SI=F) embed unhandled roll jumps; "
+    "no explicit roll adjustment is applied. See metals decision memo §6."
+)
+
 
 class MetalsProvider(MarketDataProvider):
     """yfinance-based provider for precious metals data.

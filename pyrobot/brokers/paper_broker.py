@@ -1,7 +1,9 @@
 """Paper trading broker simulator - no external API calls."""
 
+import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from pyrobot.brokers.base import BrokerInterface
@@ -528,3 +530,63 @@ class PaperBroker(BrokerInterface):
     @property
     def order_history(self) -> List[dict]:
         return list(self._order_history)
+
+    # ── Cross-session state persistence ──────────────────────────────────────
+
+    def save_state(self, path) -> None:
+        """Persist cash, positions, shorts and order history to a JSON file.
+
+        Lets a daily paper session continue the bookkeeping of earlier sessions
+        instead of starting from a fresh account every run.
+        """
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": 1,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "initial_balance": self._initial_balance,
+            "cash_balance": self._cash_balance,
+            "realized_pnl": self._realized_pnl,
+            "positions": self._positions,
+            "short_positions": self._short_positions,
+            "orders": self._orders,
+        }
+        target.write_text(json.dumps(payload, default=str, indent=2), encoding="utf-8")
+        logger.info("PaperBroker state saved to %s", target)
+
+    def load_state(self, path, *, reset: bool = False) -> bool:
+        """Restore cash/positions/order history previously saved by ``save_state``.
+
+        Mutates this broker instance in place. Returns False when the file does
+        not exist (nothing restored). Existing broker state is abandoned.
+        """
+        src = Path(path)
+        if not src.exists():
+            return False
+        try:
+            payload = json.loads(src.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            logger.warning("PaperBroker could not load %s: %s", src, exc)
+            return False
+        if not reset:
+            self._initial_balance = float(payload.get("initial_balance", self._initial_balance))
+        self._cash_balance = float(payload.get("cash_balance", self._cash_balance))
+        self._realized_pnl = float(payload.get("realized_pnl", 0.0))
+        self._positions = {str(k): dict(v) for k, v in payload.get("positions", {}).items()}
+        self._short_positions = {str(k): dict(v) for k, v in payload.get("short_positions", {}).items()}
+        self._orders = [dict(o) for o in payload.get("orders", [])]
+        logger.info(
+            "PaperBroker restored %d long / %d short positions, cash=%.2f",
+            len(self._positions), len(self._short_positions), self._cash_balance,
+        )
+        return True
+
+    def position_map(self) -> Dict[str, float]:
+        """Return symbol → signed quantity (shorts negative), matching the
+        quantity convention used by strategy ``sync_positions``."""
+        result: Dict[str, float] = {}
+        for symbol, pos in self._positions.items():
+            result[symbol] = float(pos.get("quantity", 0.0))
+        for symbol, pos in self._short_positions.items():
+            result[symbol] = -float(pos.get("quantity", 0.0))
+        return result

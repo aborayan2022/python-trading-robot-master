@@ -59,7 +59,8 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
         self._holding: Dict[str, bool] = {s: False for s in self._symbols}
         self._holding_direction: Dict[str, str] = {s: "flat" for s in self._symbols}
         self._entry_bar_idx: Dict[str, int] = {s: 0 for s in self._symbols}
-        self._bar_count: int = 0
+        self._entry_price: Dict[str, float] = {}
+        self._bar_count: Dict[str, int] = {s: 0 for s in self._symbols}
 
     def initialize(self) -> None:
         self._set_state(StrategyState.INITIALIZED)
@@ -74,7 +75,7 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
 
     def on_bar(self, symbol: str, bar: dict, stock_frame: StockFrame) -> Signal:
         try:
-            self._bar_count += 1
+            self._bar_count[symbol] += 1
             return self._evaluate(symbol, stock_frame)
         except Exception as exc:
             logger.error("CryptoMeanReversionStrategy.evaluate failed for %s: %s", symbol, exc)
@@ -96,26 +97,58 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
             return
 
         direction = str(order_dict.get("instruction", order_dict.get("side", ""))).upper()
-        if direction in ("SELL", "SELL_SHORT"):
+        if direction in ("BUY", "SELL_SHORT"):
+            self._holding[symbol] = True
+            self._holding_direction[symbol] = "long" if direction == "BUY" else "short"
+            self._entry_bar_idx[symbol] = self._bar_count[symbol]
+            self._entry_price[symbol] = _fill_price(order_dict, self._entry_price.get(symbol))
+            self.set_symbol_state(symbol, "holding", True)
+        elif direction in ("SELL", "BUY_TO_COVER"):
             self._holding[symbol] = False
             self._holding_direction[symbol] = "flat"
+            self._entry_price.pop(symbol, None)
             self.set_symbol_state(symbol, "holding", False)
-        elif direction in ("BUY", "BUY_TO_COVER"):
-            self._holding[symbol] = True
-            self._entry_bar_idx[symbol] = self._bar_count
-            self.set_symbol_state(symbol, "holding", True)
         else:
             if self._holding.get(symbol, False):
                 self._holding[symbol] = False
                 self._holding_direction[symbol] = "flat"
+                self._entry_price.pop(symbol, None)
                 self.set_symbol_state(symbol, "holding", False)
             else:
                 self._holding[symbol] = True
-                self._entry_bar_idx[symbol] = self._bar_count
+                self._entry_bar_idx[symbol] = self._bar_count[symbol]
+                self._entry_price[symbol] = _fill_price(order_dict, self._entry_price.get(symbol))
                 self.set_symbol_state(symbol, "holding", True)
 
     def get_holding(self, symbol: str) -> bool:
         return bool(self._holding.get(symbol, False))
+
+    def sync_positions(self, positions: Dict[str, float]) -> None:
+        """Synchronize holding/direction state with a broker position snapshot.
+
+        Positive quantity → long, negative quantity → short, zero → flat.
+        Stop-loss uses the broker average price when available; the entry-price
+        override is only applied on fills after sync.
+
+        Args:
+            positions: symbol → quantity (per the broker account).
+        """
+        for symbol in self._symbols:
+            try:
+                qty = float(positions.get(symbol, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                qty = 0.0
+            self._holding[symbol] = qty != 0.0
+            self._holding_direction[symbol] = "long" if qty > 0 else ("short" if qty < 0 else "flat")
+            if qty == 0:
+                self._entry_price.pop(symbol, None)
+            else:
+                self._entry_bar_idx[symbol] = self._bar_count.get(symbol, 0)
+            self.set_symbol_state(symbol, "holding", qty != 0.0)
+            logger.info(
+                "CryptoMeanReversionStrategy %s synced position for %s: qty=%s holding=%s direction=%s",
+                self._strategy_id, symbol, qty, self._holding[symbol], self._holding_direction[symbol],
+            )
 
     def _evaluate(self, symbol: str, stock_frame: StockFrame) -> Signal:
         frame = stock_frame.frame
@@ -167,14 +200,27 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
 
         # Exit
         if holding:
+            direction = self._holding_direction.get(symbol, "long")
             entry_bar = self._entry_bar_idx.get(symbol, 0)
-            bars_held = self._bar_count - entry_bar
+            bars_held = self._bar_count.get(symbol, 0) - entry_bar
+            stop_loss_pct = float(self._parameters["stop_loss_pct"])
+            entry_price = self._entry_price.get(symbol, 0.0)
+
+            # Risk stop (documented stop_loss_pct — now enforced).
+            if entry_price > 0:
+                if direction == "long" and close <= entry_price * (1.0 - stop_loss_pct):
+                    return self._make_signal(symbol, SignalAction.SELL, 0.95,
+                        f"Stop loss: close {close:.2f} ≤ entry {entry_price:.2f} × (1-{stop_loss_pct:.0%})")
+                if direction == "short" and close >= entry_price * (1.0 + stop_loss_pct):
+                    return self._make_signal(symbol, SignalAction.BUY_TO_COVER, 0.95,
+                        f"Stop loss: close {close:.2f} ≥ entry {entry_price:.2f} × (1+{stop_loss_pct:.0%})")
+
             if bars_held > int(self._parameters["max_holding_days"]):
-                action = SignalAction.SELL if self._holding_direction.get(symbol) == "long" else SignalAction.BUY_TO_COVER
+                action = SignalAction.SELL if direction == "long" else SignalAction.BUY_TO_COVER
                 return self._make_signal(symbol, action, 0.9, f"Time stop: held {bars_held} bars")
 
             if sma > 0 and abs(close - sma) / sma < 0.01:
-                action = SignalAction.SELL if self._holding_direction.get(symbol) == "long" else SignalAction.BUY_TO_COVER
+                action = SignalAction.SELL if direction == "long" else SignalAction.BUY_TO_COVER
                 return self._make_signal(symbol, action, 0.85,
                     f"Crypto mean reversion: close {close:.2f} ≈ SMA {sma:.2f}")
 
@@ -196,6 +242,7 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
             self._record_signal(signal)
             self._set_state(StrategyState.RUNNING)
             self._holding_direction[symbol] = "long"
+            self._entry_price[symbol] = close
             return signal
 
         # Short entry
@@ -210,6 +257,7 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
             self._record_signal(signal)
             self._set_state(StrategyState.RUNNING)
             self._holding_direction[symbol] = "short"
+            self._entry_price[symbol] = close
             return signal
 
         return Signal(
@@ -224,6 +272,24 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
         self._record_signal(signal)
         self._set_state(StrategyState.RUNNING)
         return signal
+
+
+def _fill_price(order_dict: dict, default: Optional[float] = None) -> Optional[float]:
+    """Extract the actual fill price from an order dict when present.
+
+    Post-trade callbacks carry the real execution price (``fill_price`` or
+    ``avg_fill_price``); the strategy records it so risk stops measure from the
+    true entry cost rather than the signal bar's close.
+    """
+    for key in ("fill_price", "avg_fill_price"):
+        raw = order_dict.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            continue
+    return default
 
 
 def _safe_value(value) -> Optional[float]:

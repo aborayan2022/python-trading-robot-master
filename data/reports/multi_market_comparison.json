@@ -1,12 +1,13 @@
 {
   "title": "Multi-Market Backtest Comparison",
-  "generated_at": "2026-09-09T23:07:41.276700+00:00",
-  "market_count": 7,
+  "generated_at": "2026-09-10T17:24:40.786271+00:00",
+  "market_count": 3,
   "strategy_count": 7,
   "strategies": [
     {
       "strategy": "USTrendFollowStrategy",
-      "market": "USTrendFollowStrategy",
+      "market": "US",
+      "strategy_label": "US equities (trend-follow)",
       "report": "us_strategy_backtest_20260905_224939.json",
       "generated_at": "2026-09-05T22:49:39.197268+00:00",
       "symbols": [
@@ -31,81 +32,86 @@
     },
     {
       "strategy": "crypto_mean_rev",
-      "market": "Crypto (mean reversion)",
-      "report": "crypto_mean_rev_backtest_20260909_222148.json",
-      "generated_at": "2026-09-09T22:21:48.139304+00:00",
+      "market": "Crypto",
+      "strategy_label": "Crypto (mean reversion)",
+      "report": "crypto_mean_rev_backtest_20260910_165228.json",
+      "generated_at": "2026-09-10T16:52:28.215983+00:00",
       "symbols": [
         "BTC-USD",
         "ETH-USD"
       ],
-      "strategy_return_pct": 0.02,
+      "strategy_return_pct": -3.4,
       "buy_and_hold_return_pct": 18.0,
       "beat_benchmark": false,
-      "sharpe_ratio": 0.0083,
-      "max_drawdown_pct": -2.91,
-      "total_trades": 7,
-      "win_rate_pct": 57.14
+      "sharpe_ratio": -0.3478,
+      "max_drawdown_pct": -4.26,
+      "total_trades": 16,
+      "win_rate_pct": 37.5
     },
     {
       "strategy": "crypto_trend",
-      "market": "Crypto (trend / breakout)",
-      "report": "crypto_trend_backtest_20260909_223403.json",
-      "generated_at": "2026-09-09T22:34:03.343910+00:00",
+      "market": "Crypto",
+      "strategy_label": "Crypto (trend / breakout)",
+      "report": "crypto_trend_backtest_20260910_165003.json",
+      "generated_at": "2026-09-10T16:50:03.475026+00:00",
       "symbols": [
         "BTC-USD",
         "ETH-USD"
       ],
-      "strategy_return_pct": 3.3,
+      "strategy_return_pct": 2.82,
       "buy_and_hold_return_pct": 18.0,
       "beat_benchmark": false,
-      "sharpe_ratio": 0.4244,
-      "max_drawdown_pct": -1.31,
-      "total_trades": 8,
-      "win_rate_pct": 75.0
+      "sharpe_ratio": 0.2181,
+      "max_drawdown_pct": -4.2,
+      "total_trades": 12,
+      "win_rate_pct": 66.67
     },
     {
       "strategy": "metals_momentum",
-      "market": "Precious metals (momentum)",
-      "report": "metals_momentum_backtest_20260909_223406.json",
-      "generated_at": "2026-09-09T22:34:06.770743+00:00",
+      "market": "Metals",
+      "strategy_label": "Precious metals (momentum)",
+      "report": "metals_momentum_backtest_20260910_161649.json",
+      "generated_at": "2026-09-10T16:16:49.307374+00:00",
       "symbols": [
         "GC=F",
         "SI=F",
         "GLD",
         "SLV"
       ],
-      "strategy_return_pct": -3.24,
-      "buy_and_hold_return_pct": 10.8,
+      "strategy_return_pct": -19.82,
+      "buy_and_hold_return_pct": 136.26,
       "beat_benchmark": false,
-      "sharpe_ratio": -0.2392,
-      "max_drawdown_pct": -7.53,
-      "total_trades": 47,
-      "win_rate_pct": 53.19
+      "sharpe_ratio": -0.6428,
+      "max_drawdown_pct": -25.78,
+      "total_trades": 55,
+      "win_rate_pct": 32.73
     },
     {
       "strategy": "metals_trend",
-      "market": "Precious metals (trend-follow)",
-      "report": "metals_trend_backtest_20260909_221837.json",
-      "generated_at": "2026-09-09T22:18:37.063462+00:00",
+      "market": "Metals",
+      "strategy_label": "Precious metals (trend-follow)",
+      "report": "metals_trend_backtest_20260910_161431.json",
+      "generated_at": "2026-09-10T16:14:31.447812+00:00",
       "symbols": [
         "GC=F",
         "SI=F",
         "GLD",
         "SLV"
       ],
-      "strategy_return_pct": 134.03,
-      "buy_and_hold_return_pct": 10.8,
-      "beat_benchmark": true,
-      "sharpe_ratio": 1.0106,
-      "max_drawdown_pct": -25.47,
-      "total_trades": 66,
-      "win_rate_pct": 22.73
+      "strategy_return_pct": -17.58,
+      "buy_and_hold_return_pct": 136.26,
+      "beat_benchmark": false,
+      "sharpe_ratio": -0.5076,
+      "max_drawdown_pct": -24.3,
+      "total_trades": 275,
+      "win_rate_pct": 39.64
     },
     {
       "strategy": "us_breakout",
-      "market": "US equities (breakout)",
-      "report": "us_breakout_backtest_20260909_223713.json",
-      "generated_at": "2026-09-09T22:37:13.169925+00:00",
+      "market": "US",
+      "strategy_label": "US equities (breakout)",
+      "report": "us_breakout_backtest_20260910_162237.json",
+      "generated_at": "2026-09-10T16:22:37.766205+00:00",
       "symbols": [
         "AAPL",
         "MSFT",
@@ -118,19 +124,20 @@
         "JNJ",
         "WMT"
       ],
-      "strategy_return_pct": 2.55,
+      "strategy_return_pct": -11.52,
       "buy_and_hold_return_pct": 195.08,
       "beat_benchmark": false,
-      "sharpe_ratio": 0.2391,
-      "max_drawdown_pct": -2.53,
-      "total_trades": 78,
-      "win_rate_pct": 52.56
+      "sharpe_ratio": -0.3472,
+      "max_drawdown_pct": -17.11,
+      "total_trades": 126,
+      "win_rate_pct": 31.75
     },
     {
       "strategy": "us_mean_reversion",
-      "market": "US equities (mean reversion)",
-      "report": "us_mean_reversion_backtest_20260909_222903.json",
-      "generated_at": "2026-09-09T22:29:03.241555+00:00",
+      "market": "US",
+      "strategy_label": "US equities (mean reversion)",
+      "report": "us_mean_reversion_backtest_20260910_164750.json",
+      "generated_at": "2026-09-10T16:47:50.931645+00:00",
       "symbols": [
         "AAPL",
         "MSFT",
@@ -143,13 +150,13 @@
         "JNJ",
         "WMT"
       ],
-      "strategy_return_pct": 7.42,
+      "strategy_return_pct": -0.05,
       "buy_and_hold_return_pct": 195.08,
       "beat_benchmark": false,
-      "sharpe_ratio": 0.4687,
-      "max_drawdown_pct": -4.39,
-      "total_trades": 184,
-      "win_rate_pct": 59.24
+      "sharpe_ratio": 0.0356,
+      "max_drawdown_pct": -13.15,
+      "total_trades": 343,
+      "win_rate_pct": 43.44
     }
   ]
 }

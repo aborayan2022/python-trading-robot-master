@@ -403,6 +403,19 @@ class TradingPipeline:
 
             order = self.order_manager.create_from_signal(signal=signal, quantity=float(quantity))
             response = self.execution_engine.submit(order)
+            self.audit_ledger.record(
+                action=AuditAction.ORDER_SUBMITTED,
+                symbol=symbol,
+                strategy_id=signal.strategy_id,
+                details={
+                    "client_order_id": order.client_order_id,
+                    "broker_order_id": response.get("order_id"),
+                    "instruction": order.side.value,
+                    "quantity": order.quantity,
+                    "submission_status": response.get("status"),
+                    "action": signal.action.value,
+                },
+            )
             fill = self._settle_order(order, response)
             return {
                 "symbol": symbol,
@@ -433,16 +446,40 @@ class TradingPipeline:
             return {}
         filled_qty = float(status.get("filled_quantity", 0.0) or 0.0)
         avg_price = float(status.get("avg_fill_price", 0.0) or 0.0)
+        fill_status = str(status.get("status") or "UNKNOWN")
         if filled_qty > 0 and avg_price > 0:
             self.risk_manager.record_fill(order, avg_price, filled_qty)
+            self.audit_ledger.record(
+                action=AuditAction.ORDER_FILLED,
+                symbol=order.symbol,
+                strategy_id=order.signal.strategy_id if getattr(order, "signal", None) else None,
+                details={
+                    "client_order_id": order.client_order_id,
+                    "instruction": order.side.value,
+                    "filled_quantity": filled_qty,
+                    "avg_fill_price": avg_price,
+                    "status": fill_status,
+                },
+            )
             if isinstance(self.signal_source, BaseStrategy):
                 self.signal_source.on_order_fill({
                     "client_order_id": order.client_order_id,
                     "symbol": order.symbol,
                     "quantity": filled_qty,
+                    "side": order.side.value,
                     "fill_price": avg_price,
-                    "status": status.get("status"),
+                    "status": fill_status,
                 })
+        elif "REJECTED" in fill_status or "FAILED" in fill_status:
+            self.audit_ledger.record(
+                action=AuditAction.ORDER_REJECTED,
+                symbol=order.symbol,
+                details={
+                    "client_order_id": order.client_order_id,
+                    "instruction": order.side.value,
+                    "status": fill_status,
+                },
+            )
         return status
 
     def _run_drift_check(self) -> None:

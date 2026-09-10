@@ -257,3 +257,50 @@ markets and strategies without manual linking?
 - `pyrobot/strategies/__init__.py` — updated exports.
 - `pyrobot/runtime/pipeline.py` — optional: use registry for strategy creation.
 
+
+---
+
+## 2026-09-10 — Wave-5 revalidation: why the first-round metal/crypto figures were unreliable
+
+**Question:** The first advisory claimed `metals_trend` beat Buy & Hold (+134%).
+Wave-5 remediation revalidation shows no strategy beats its benchmark. What was
+wrong, and what does the verification procedure change?
+
+**Sources:**
+- `git show d050f3d:pyrobot/backtesting/runner.py` (old short-order handling).
+- Synthetic short round-trip test (`/tmp/opencode/test_short_borrow.py`).
+
+**Findings:**
+- The `d050f3d` runner routed `SELL_SHORT` orders through the plain `SELL`
+  (exit) branch: shorts were silently dropped when flat, or closed an open long
+  at a short signal. Shorts were never genuinely opened — the short side was
+  **untested**, matching the first report's own disclosure.
+- All six new strategies' `on_order_fill` treated `SELL_SHORT` as an exit and
+  `BUY_TO_COVER` as an entry, so when shorts *were* executable the strategy never
+  entered the "holding" state — shorts could never be closed.
+- Also fixed in Wave 5: per-symbol `_bar_count`, enforced stop-losses in the two
+  mean-reversion strategies, correct two-sided trailing exit in `us_breakout`,
+  `periods_per_year=365` for crypto, and borrow/carry accounting on open shorts.
+
+**Comparison with our use case:**
+- The honest-backtest claim ("two-sided, cost-adjusted") was structurally true
+  but mechanically incomplete: execution of one side was broken. A passing
+  strategy test suite did not cover order anatomy (which side opens / closes).
+
+**Decision / Lesson:**
+- Always treat "backtest is honest" as an **assertion to re-verify**, not a
+  status flag. Wave 5 added direction-aware fill handling and synthetic short
+  round-trip verification.
+- `metals_trend` +134% is **retracted**; revalidated figures are in
+  `AI_Quant_Multi_Market_Advisory_Report.md` §3 (best safe profile here:
+  `us_trend` +91.9% long-only; `crypto_trend` +2.8%).
+- Decision memos for metals and crypto are filed post-hoc
+  (`reports/decision_memo_metals.md`, `reports/decision_memo_crypto.md`) and the
+  verification procedure was added to `docs/professional_development_standard.md`.
+
+**Impact on code:**
+- `pyrobot/backtesting/runner.py` — honest two-sided short execution + borrow.
+- All 6 strategy files — direction-correct `on_order_fill`; per-symbol bar counts.
+- `pyrobot/backtesting/cost_model.py` — `estimate_borrow_cost`.
+- `data/reports/*_backtest_20260910_16*.json` — revalidated full runs.
+- test: `pytest tests/` (561 passed) + synthetic short round-trip.

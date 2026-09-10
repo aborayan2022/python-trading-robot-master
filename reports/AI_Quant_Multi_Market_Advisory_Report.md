@@ -8,8 +8,8 @@
 | **Plan** | `AI_Quant_Trading_Platform_Multi_Market_Wave_Prompt.md` (v0.2.0 → Multi-Market) |
 | **Report date** | 2026-09-10 |
 | **Prepared by** | Programmer Team Leader (review & completion of interrupted final task) |
-| **Status** | **COMPLETE — all 5 waves implemented, 561 tests green, advisory report delivered** |
-| **Headline** | 3 markets × 7 strategies, bi-directional, cost-adjusted, benchmark-compared. **1 of 7 strategies demonstrates a systematic edge vs Buy & Hold (metals_trend: +134.0% vs +10.8%).** |Athe|Edge is NOT proven for the remaining 6 — flagged as the single highest risk. |
+| **Status** | **COMPLETE — all 5 waves implemented, Wave 5 remediation & revalidation delivered, 561 tests green** |
+| **Headline** | 3 markets × 7 strategies, bi-directional, cost-adjusted, benchmark-compared. **Wave-5 revalidation with real short-side execution shows NO strategy beats Buy & Hold on its own market in the 2021–2026 window** (best: `us_trend` +91.9% vs B&H +195.1%). The earlier "+134%" `metals_trend` figure was an artifact of a runner that silently dropped short orders — it is retracted. |
 
 ---
 
@@ -17,11 +17,11 @@
 
 The Multi-Market Wave Directive was **95% implemented** when a power outage interrupted the session **during the final task (Wave 4 — final advisory report + last verification)**. The work was `git add`-ed but **never committed**; `reports/AI_Quant_Multi_Market_Advisory_Report.md` was missing; and the Wave-4 test file failed 6 tests.
 
-The team reviewed the full plan against the repository, completed the remaining work, **fixed 4 real defects** left by the interrupted session, and delivered this report.
+The team reviewed the full plan against the repository, completed the remaining work, **fixed 4 real defects** left by the interrupted session, and (in **Wave 5**) hardened the honest-short accounting, fixed a direction-handling bug in 6 strategies' fill callbacks, re-ran all six full backtests, and regenerated every aggregation report. This edition supersedes the earlier report circulated at commit `d050f3d`.
 
 ### Was the plan successfully implemented?
 
-**Yes — functionally complete and green, with one material caveat:**
+**Yes — functionally complete and green.** The Wave-5 revalidation then corrected a runner defect (shorts were never truly executed, inflating the old "$+134\%$" claim) and re-reported every strategy with honest short-side accounting:
 
 | Dimension | Verdict |
 |---|---|
@@ -30,9 +30,9 @@ The team reviewed the full plan against the repository, completed the remaining 
 | Wave 2 — Strategy suite (registry + 6 new strategies, Long+Short) | ✅ Complete (after 1 bug fix) |
 | Wave 3 — Backtest + paper sessions per market (6 backtests, 2 paper sessions, audit) | ✅ Complete (after runner fix + data refresh) |
 | Wave 4 — ML/regime/weekly-research/UI/CI/Docker + **final advisory report** | ✅ Complete (final task executed here) |
-| **Proven Edge (Rule 2 / Rule 5 of the directive)** | ⚠️ **Partial — only metals_trend beats Buy & Hold** |
+| **Proven Edge (Rule 2 / Rule 5 of the directive)** | ⚠️ **None — no strategy beats its market's Buy & Hold with costs** |
 
-The platform is exactly what the directive's Section 7 asks for *in structure*: Multi-Market, Multi-Strategy, Bi-Directional, Cost-Adjusted, Benchmark-Compared, Regime-Aware, Risk-Controlled, Audit-Trailed, Paper-Tested (NOT Live). **In edge quality** it currently has one demonstrated edge out of seven strategies — which must be honestly reported to the consultant rather than hidden.
+The platform is exactly what the directive's Section 7 asks for *in structure*: Multi-Market, Multi-Strategy, Bi-Directional (now with genuinely executed and closed shorts), Cost-Adjusted, Benchmark-Compared, Regime-Aware, Risk-Controlled, Audit-Trailed, Paper-Tested (NOT Live). **In edge quality** it currently demonstrates no cost-adjusted edge over Buy & Hold — which must be honestly reported to the consultant rather than hidden.
 
 ---
 
@@ -96,36 +96,42 @@ The platform is exactly what the directive's Section 7 asks for *in structure*: 
 | 7 | `CryptoProvider.TRADING_CALENDAR` not a class attribute (criteria `1.5` literal check) | acceptance check failed | Added class-level constant on both providers. |
 | 8 | Aggregators included `--dry-run` (200-bar) reports as "results" | comparison polluted by wiring checks | Skip `dry_run` reports; keep latest honest full run per strategy. |
 | 9 | 3 ruff errors in `pyrobot/` (would fail CI lint step) | CI red | Fixed (unused import + 2 unused locals). |
+| 10 | **`d050f3d` runner routed `SELL_SHORT` through the `SELL` exit branch** — shorts silently dropped when flat, or *closed* an open long at a short signal | old results were long-only / sequence-corrupted | Full short side executed & closed (`SELL_SHORT`/`BUY_TO_COVER`); per-bar borrow charge (1.0% p.a. placeholder) accrued on open short notional; short proceeds and closing PnL accounted with cash. |
+| 11 | **Direction bug in `on_order_fill` for all 6 new strategies** — `SELL_SHORT` treated as exit, `BUY_TO_COVER` as entry | shorts never entered holding state → could never be exited | `BUY`/`SELL_SHORT` → entry, `SELL`/`BUY_TO_COVER` → exit; pipeline passes `order.side.value` into the callback. |
+| 12 | Per-symbol bar counts, stop-loss enforcement, and short trailing-exit tracking defects | miscounts/wrong exits | Per-symbol `_bar_count` in 5 strategies; stops enforced in `crypto_mean_rev`/`us_mean_reversion`; correct short trailing exit (`_lowest_since_entry`) in `us_breakout`; `periods_per_year=365` in both crypto backtest scripts. |
+| 13 | Aggregators: `market_count` was 7 (no market grouping) and duplicate `USTrendFollowStrategy` rows | comparison report misleading | `MARKET_GROUPS` (US/Metals/Crypto) + "keep latest report per strategy" dedup. |
 
 ---
 
-## 3. Final honest backtest results (5y daily, next-bar-open fills, costs included, vs Buy & Hold)
+## 3. Final honest backtest results (5y daily, next-bar-open fills, costs + short borrow included, vs Buy & Hold)
 
-Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH-USD), 2021-09 → 2026-09.
+Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH-USD), 2021-09 → 2026-09. **Wave-5 rehabilitation:** the runner now executes and closes `SELL_SHORT`/`BUY_TO_COVER` orders end-to-end and charges borrow/carry on open shorts (1.0% p.a.); all six strategies' `on_order_fill` callbacks correctly map `BUY`/`SELL_SHORT` → entry and `SELL`/`BUY_TO_COVER` → exit. Figures below are the honest, revalidated results.
 
 | Strategy | Market | Return | Buy & Hold | Sharpe | MaxDD | Trades | WinRate | Beats B&H? |
 |---|---|---|---|---|---|---|---|---|
-| **metals_trend** | Metals | **+134.03%** | +10.8% | 1.01 | -25.5% | 66 | 22.7% | ✅ **Yes** |
-| us_trend (existing) | US | +91.91% | +195.08% | 1.19 | -15.1% | 631 | — | ❌ |
-| us_mean_reversion | US | +7.42% | +195.08% | 0.47 | -4.4% | 184 | 59.2% | ❌ |
-| us_breakout | US | +2.55% | +195.08% | 0.24 | -2.5% | 78 | 52.6% | ❌ |
-| crypto_trend | Crypto | +3.30% | +18.0% | 0.42 | -1.3% | 8 | 75.0% | ❌ |
-| crypto_mean_rev | Crypto | +0.02% | +18.0% | 0.01 | -2.9% | 7 | 57.1% | ❌ |
-| metals_momentum | Metals | **−3.24%** | +10.8% | -0.24 | -7.5% | 47 | 53.2% | ❌ |
+| **us_trend** (existing) | US | **+91.91%** | +195.08% | 1.19 | -15.1% | 631 | 64.5% | ❌ |
+| crypto_trend | Crypto | +2.82% | +18.0% | 0.22 | -4.2% | 12 | 66.7% | ❌ |
+| us_mean_reversion | US | −0.05% | +195.08% | 0.04 | -13.2% | 343 | 43.4% | ❌ |
+| crypto_mean_rev | Crypto | −3.40% | +18.0% | -0.35 | -4.3% | 16 | 37.5% | ❌ |
+| us_breakout | US | −11.52% | +195.08% | -0.35 | -17.1% | 126 | 31.8% | ❌ |
+| metals_trend | Metals | −17.58% | +136.26% | -0.51 | -24.3% | 275 | 39.6% | ❌ |
+| metals_momentum | Metals | −19.82% | +136.26% | -0.64 | -25.8% | 55 | 32.7% | ❌ |
+
+> **Why the earlier +134% `metals_trend` figure is retracted:** commit `d050f3d`'s runner routed `SELL_SHORT` orders through the plain `SELL` (exit) branch — if no long was open the order was silently dropped, and if a long was open it was *closed* at the short signal. No short was ever actually opened. Combined with a (since-fixed) `metals_trend.on_order_fill` bug that treated `SELL_SHORT` as an exit and `BUY_TO_COVER` as an entry, the old numbers were effectively a subset of long-only behavior. Restoring true short execution and exit bookkeeping is what the honest Metalls/other results above reflect. Shorts can now both open and close, and borrow/carry is charged per bar on open short notional.
 
 ### Monte Carlo stress (bootstrap over realized trade PnLs, 1000 sims, $100k, ruin = 25% drawdown)
 
 | Strategy | Median return | Worst-5% (p5) | Ruin prob |
 |---|---|---|---|
 | us_trend | +49.1% | +21.3% | 0.1% |
-| us_mean_reversion | +7.6% | −0.8% | 0.0% |
-| us_breakout | +2.4% | −4.6% | 0.0% |
-| metals_trend | −2.1% | −4.1% | 0.0% |
-| crypto_trend | +3.3% | −0.3% | 0.0% |
-| crypto_mean_rev | +0.02% | −3.7% | 0.0% |
-| metals_momentum | −3.5% | −11.9% | 0.1% |
+| crypto_trend | +3.0% | −2.9% | 0.0% |
+| us_mean_reversion | +0.8% | −20.2% | 5.1% |
+| crypto_mean_rev | −3.4% | −8.8% | 0.0% |
+| us_breakout | −11.3% | −25.0% | 9.3% |
+| metals_trend | −12.7% | −25.5% | 8.9% |
+| metals_momentum | −18.9% | −42.8% | **38.5%** |
 
-> Note: `metals_trend`'s +134% comes from a ~23% win rate — a few large trend winners with many small losers (classic trend-following profile). Its Monte Carlo median is *negative* (−2.1%), i.e., the edge is **concentrated and path-dependent**; treat with corresponding caution. Also note it materially underperforms plain metals Buy & Hold *risk‑adjusted* on Monte Carlo despite beating on total return.
+> Note: only `us_trend` and `crypto_trend` have positive Monte-Carlo medians, and `us_trend` alone is positive at the 5th percentile. `metals_momentum` shows a 38.5% ruin probability — the weakest profile in the suite. The patterns are consistent with single-market momentum/trend-following substantially lagging buy-and-hold through the 2021–2026 equity/metals rally, while paying spread+fee drag and (for metals) borrow on unprofitable short trades.
 
 ---
 
@@ -150,15 +156,16 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 3. Crypto/metals data via **yfinance** (accepted by the directive as the primary source); daily bars, not intraday.
 4. Regime→strategy mapping and position scaling constants (0.25–1.0) are **rule defaults**, not ML-tuned.
 5. The two `us_trend` backtest reports in `data/reports/` are pre-existing project artifacts (kept as historical evidence); the 6 new-strategy reports were regenerated on corrected data.
+6. The 6 new-strategy reports were **re-run in full** for Wave 5 (files stamped `20260910_16xxxx`); older reports of the same strategies are retained for audit but are superseded. Short borrow uses 1.0% p.a. as a placeholder rate until the broker/counterparty contract is known.
 
 ---
 
 ## 6. What remains risky (honest list)
 
-1. **Edge not proven for 6 of 7 strategies.** By the directive's own Rule 2/5/8, only `metals_trend` currently survives the "beat Buy & Hold with costs" test. The platform should **not** be marketed as multi-market alpha until walk-forward(out-of-sample) validation is attached to each strategy.
-2. **metals_trend positive Monte-Carlo robustness is negative-median** — its edge is path-dependent; needs a proper walk-forward split before it can be relied on.
-3. **Parameterization is default-only.** No walk-forward tuning was performed on the 6 new strategies (prohibition: no tuning on the test set). Promising quick wins: `us_breakout`/`crypto_trend` (already positive, low trade counts) and `us_mean_reversion` risk-adjusted profile.
-4. **Data quality**: futures volume for GC=F/SI=F has small pockets of zero-volume days (data artifact, not fatal); crypto/metals caches are one-refresh-old.
+1. **No strategy beats Buy & Hold with costs in this window.** By the directive's own Rule 2/5/8, none of the 7 survives the "beat Buy & Hold after costs" test on 2021–2026 daily data. The platform should **not** be marketed as multi-market alpha; treat every strategy as unproven until out-of-sample/walk-forward validation is attached.
+2. **Short-side drag is now material.** True short execution + borrow + low short-side win rates drive most of the degradation vs the old long-only figures (e.g., `metals_trend` now trades 275 times at 39.6% win vs the old 66-trade long-only subset). The sell logic, not just the accounting, needs rework before any short book is defensible.
+3. **Parameterization is default-only.** No walk-forward tuning was performed on the 6 new strategies (prohibition: no tuning on the test set). Nearest to positive: `crypto_trend` (+2.8%, 66.7% win) and `us_mean_reversion` (−0.05%, positive MC median). Weakest: `metals_momentum` (38.5% ruin).
+4. **Data quality**: futures volume for GC=F/SI=F has small pockets of zero-volume days (data artifact, not fatal); crypto/metals caches are one-refresh-old; no futures contract roll handling (CME GC/SI have no roll logic in `metals_provider.py`).
 5. `StrategyRegistry.clear()` remains a footgun for tests if the registry is not re-populated (mitigated by `register_builtin_strategies()`).
 6. Docker Compose validated locally with `docker compose config` (v2). The literal `docker-compose` (v1) binary was not installed on the review machine; CI does not run compose, so real container startup remains unverified.
 7. Mypy full-tree debt is pre-existing (~130 errors) and explicitly non-blocking in CI; the enforced module set passes (`ruff check pyrobot/` → clean).
@@ -167,7 +174,7 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 
 ## 7. Performance, security, migration
 
-**Performance:** Backtests are compute-bound (full 5-year run ≈ 2–2.5 min/strategy on a laptop; TradingLoop runtime replay dominates). No production live path, so no infrastructure risk.
+**Performance:** Backtests are compute-bound (full 5-year run ≈ 0.5–6 min/strategy; `us_mean_reversion` at ~15 min is the outlier; TradingLoop runtime replay dominates printing). No production live path, so no infrastructure risk.
 
 **Security:** No secrets added; no live-trading unlock; audit ledger remains cryptographically signed; console live-trading remains locked by env var. Aggregators write only local JSON.
 
@@ -177,12 +184,13 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 
 ## 8. Recommendations to the consultant
 
-1. **Approve the structural completion** (5 waves, 561 tests green) — the multi-market **platform** is built and safe (paper-only).
-2. **Do not approve "edge" claims for the 6 unproven strategies.** Require walk-forward + Monte Carlo acceptance per strategy/market before any scaling.
+1. **Approve the structural completion** (5 waves, Wave 5 remediation, 561 tests green) — the multi-market **platform** is built, honest, and safe (paper-only).
+2. **Do not approve any "edge" claim.** Require walk-forward + Monte Carlo acceptance per strategy/market before any scaling. Current data supports **research** (not deployment) for `crypto_trend` and `us_trend`.
 3. **Next quarter (next wave) priorities**, in order:
-   - Walk-forward parameter research focused on `us_breakout`, `crypto_trend`, `us_mean_reversion` (nearest to a positive profile);
-   - Re-examine `metals_trend` with a proper out-of-sample split (its +134% needs dis-aggregation into walk-forward windows);
-   - Either tune-and-revalidate or **retire** `metals_momentum` / `crypto_mean_rev` per Rule 5 (quality over quantity);
+   - Walk-forward parameter research focused on `crypto_trend`, `us_mean_reversion`, `us_trend` (closest to a positive cost-adjusted profile);
+   - Rework the short-side logic in the metals/US strategies (low short win rate + borrow drag), then revalidate; until then, cap or disable shorts;
+   - **Retire or rewrite** `metals_momentum` per Rule 5 (38.5% MC ruin — quality over quantity);
+   - Add CME futures roll handling to `metals_provider.py` and re-run metals windows;
    - Expand paper sessions to run on schedule (cron) so live market conditions feed the audit trail;
    - Wire `RegimeStrategyMatcher` output into position sizing in the live pipeline (currently advisory-only).
 4. **CI/docker**: add a compose config step + walk-forward regression gate before merging future strategy changes.
@@ -195,11 +203,9 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 python -m pytest tests/ -v                      # 561 passed
 for b in backtest_us_mean_reversion backtest_us_breakout \
          backtest_metals_trend backtest_metals_momentum \
-         backtest_crypto_trend backtest_crypto_mean_rev; do python $b.py --dry-run; done
-python metals_paper_session.py --smoke
-python crypto_paper_session.py --smoke
-python scripts/multi_market_comparison.py
-python scripts/strategy_validation.py
+         backtest_crypto_trend backtest_crypto_mean_rev; do python $b.py; done   # Wave-5 full honest reruns
+python scripts/multi_market_comparison.py       # 7 strategies across 3 markets
+python scripts/strategy_validation.py           # walk-forward presence + 1000-run Monte Carlo
 ruff check pyrobot/                            # All checks passed
 docker compose config                          # OK
 python -c "from pyrobot.data.crypto_provider import CryptoProvider; print(CryptoProvider.TRADING_CALENDAR)"

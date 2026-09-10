@@ -49,9 +49,55 @@ The full connected path — data → features/signals → risk gates → executi
 # Paper-mode replay demo (no broker account, no real money)
 PYROBOT_SYMBOLS=MSFT,AAPL PYROBOT_BARS=500 PYROBOT_SIGNAL_SOURCE=example \
     python -m pyrobot.runtime.loop
+
+# Or drive any registered strategy by name (Wave 5 wiring)
+PYROBOT_STRATEGY=crypto_trend PYROBOT_SYMBOLS=BTC-USD PYROBOT_BARS=500 \
+    python pyrobot/runtime/loop.py
 ```
 
 The audit trail lands in `data/audit/ledger.jsonl` as a verifiable SHA-256 hash chain that survives restarts. `TradingPipeline` / `TradingLoop` (`pyrobot/runtime/`) are the integration points for live bar providers. See `IMPLEMENTATION_STATUS.md` for the roadmap state.
+
+## Multi-Market (US / Metals / Crypto)
+
+Three markets, seven strategies, bi-directional execution, honest next-bar-open
+backtests with `ExecutionCostModel` (spread, slippage, commission, SEC fee,
+participation caps, and per-bar short borrow/carry). Paper-only — no live path.
+
+Environment (see `.env.example`):
+
+| Variable | Purpose |
+|---|---|
+| `PYROBOT_MARKET` | `US` (default) \| `metals` \| `crypto` — `DataProviderRegistry` |
+| `PYROBOT_STRATEGY` | Registered strategy name for the loop (`StrategyRegistry`) |
+| `PYROBOT_UNIVERSE` | Symbol override for backtests / paper sessions |
+| `PYROBOT_DATA_DIR` | Root containing `data/` (default `.`) |
+| `PYROBOT_METALS_YEARS` / `PYROBOT_CRYPTO_YEARS` | History length (default 5) |
+
+Full honest backtests (5y daily, benchmark-compared, Monte Carlo validated via
+`scripts/strategy_validation.py`):
+
+```bash
+for b in backtest_us_breakout backtest_us_mean_reversion \
+         backtest_metals_trend backtest_metals_momentum \
+         backtest_crypto_trend backtest_crypto_mean_rev; do
+    python $b.py
+done
+python scripts/multi_market_comparison.py
+python scripts/strategy_validation.py
+```
+
+Daily paper sessions persist `PaperBroker` state (`data/paper_state/*.json`) and
+synchronize strategy holding state across runs:
+
+```bash
+python metals_paper_session.py --now   # COMEX metals, latest daily candle
+python crypto_paper_session.py --now   # crypto, 24/7/365
+python metals_paper_session.py --dry-run   # full path, no orders
+```
+
+Results and the honest revalidated numbers are in
+`reports/AI_Quant_Multi_Market_Advisory_Report.md`; market decisions live in
+`reports/decision_memo_metals.md` and `reports/decision_memo_crypto.md`.
 
 ## What's New in v0.2.0
 

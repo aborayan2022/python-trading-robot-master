@@ -1,10 +1,20 @@
-# PyRobot scheduled jobs — installed 2026-09-07
+# PyRobot scheduled jobs — installed 2026-09-07, extended 2026-09-10 (Wave 5)
 # System timezone is Africa/Cairo (EEST, UTC+3); all times below are Cairo.
 # Cron environment is minimal: every job cd's to the repo root and uses the
 # absolute venv python so .env + data paths resolve from the repo.
+# Paper sessions persist their PaperBroker state to data/paper_state/*.json so
+# daily runs continue the virtual account instead of restarting at $100k.
 
 # --- Weekly research session (item 2.4): every Saturday 10:00 ---
 0 10 * * 6 cd /home/ahmed/worke/python-trading-robot-master && .venv/bin/python scripts/weekly_research.py >> data/cron/weekly_research.log 2>&1
+
+# --- Daily paper sessions per market (Wave 5) ---
+# US: weekday full session near close (~22:40 Cairo = 15:40 ET)
+40 22 * * 1-5 cd /home/ahmed/worke/python-trading-robot-master && .venv/bin/python us_paper_session.py >> data/cron/us_paper_session.log 2>&1
+# Metals: daily (COMEX ~23h, only Saturday closed)
+30 22 * * 0,1-5 cd /home/ahmed/worke/python-trading-robot-master && .venv/bin/python metals_paper_session.py --now >> data/cron/metals_paper_session.log 2>&1
+# Crypto: daily, 24/7/365
+30 22 * * * cd /home/ahmed/worke/python-trading-robot-master && .venv/bin/python crypto_paper_session.py --now >> data/cron/crypto_paper_session.log 2>&1
 
 # --- One-off live paper sessions for Monday 2026-09-07 (item 3.3.2) ---
 # Smoke at market open (~16:35 Cairo = 09:35 ET)

@@ -56,7 +56,7 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
         self._holding_direction: Dict[str, str] = {s: "flat" for s in self._symbols}
         self._entry_bar_idx: Dict[str, int] = {s: 0 for s in self._symbols}
         self._entry_price: Dict[str, float] = {}
-        self._bar_count: int = 0
+        self._bar_count: Dict[str, int] = {s: 0 for s in self._symbols}
 
     def initialize(self) -> None:
         self._set_state(StrategyState.INITIALIZED)
@@ -69,7 +69,7 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
 
     def on_bar(self, symbol: str, bar: dict, stock_frame: StockFrame) -> Signal:
         try:
-            self._bar_count += 1
+            self._bar_count[symbol] += 1
             return self._evaluate(symbol, stock_frame)
         except Exception as exc:
             logger.error("CryptoTrendBreakoutStrategy.evaluate failed for %s: %s", symbol, exc)
@@ -91,15 +91,16 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
             return
 
         direction = str(order_dict.get("instruction", order_dict.get("side", ""))).upper()
-        if direction in ("SELL", "SELL_SHORT"):
+        if direction in ("BUY", "SELL_SHORT"):
+            self._holding[symbol] = True
+            self._holding_direction[symbol] = "long" if direction == "BUY" else "short"
+            self._entry_bar_idx[symbol] = self._bar_count[symbol]
+            self.set_symbol_state(symbol, "holding", True)
+        elif direction in ("SELL", "BUY_TO_COVER"):
             self._holding[symbol] = False
             self._holding_direction[symbol] = "flat"
             self._entry_price.pop(symbol, None)
             self.set_symbol_state(symbol, "holding", False)
-        elif direction in ("BUY", "BUY_TO_COVER"):
-            self._holding[symbol] = True
-            self._entry_bar_idx[symbol] = self._bar_count
-            self.set_symbol_state(symbol, "holding", True)
         else:
             if self._holding.get(symbol, False):
                 self._holding[symbol] = False
@@ -108,11 +109,37 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
                 self.set_symbol_state(symbol, "holding", False)
             else:
                 self._holding[symbol] = True
-                self._entry_bar_idx[symbol] = self._bar_count
+                self._entry_bar_idx[symbol] = self._bar_count[symbol]
                 self.set_symbol_state(symbol, "holding", True)
 
     def get_holding(self, symbol: str) -> bool:
         return bool(self._holding.get(symbol, False))
+
+    def sync_positions(self, positions: Dict[str, float]) -> None:
+        """Synchronize holding/direction state with a broker position snapshot.
+
+        Positive quantity → long, negative quantity → short, zero → flat.
+        Time-stop bars are restarted from the current bar on sync.
+
+        Args:
+            positions: symbol → quantity (per the broker account).
+        """
+        for symbol in self._symbols:
+            try:
+                qty = float(positions.get(symbol, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                qty = 0.0
+            self._holding[symbol] = qty != 0.0
+            self._holding_direction[symbol] = "long" if qty > 0 else ("short" if qty < 0 else "flat")
+            if qty == 0:
+                self._entry_price.pop(symbol, None)
+            else:
+                self._entry_bar_idx[symbol] = self._bar_count.get(symbol, 0)
+            self.set_symbol_state(symbol, "holding", qty != 0.0)
+            logger.info(
+                "CryptoTrendBreakoutStrategy %s synced position for %s: qty=%s holding=%s direction=%s",
+                self._strategy_id, symbol, qty, self._holding[symbol], self._holding_direction[symbol],
+            )
 
     def _evaluate(self, symbol: str, stock_frame: StockFrame) -> Signal:
         frame = stock_frame.frame
@@ -163,7 +190,7 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
         # Exit
         if holding:
             entry_bar = self._entry_bar_idx.get(symbol, 0)
-            bars_held = self._bar_count - entry_bar
+            bars_held = self._bar_count.get(symbol, 0) - entry_bar
             if bars_held > int(self._parameters["max_holding_days"]):
                 action = SignalAction.SELL if self._holding_direction.get(symbol) == "long" else SignalAction.BUY_TO_COVER
                 return self._make_signal(symbol, action, 0.9, f"Time stop: held {bars_held} bars")

@@ -52,7 +52,8 @@ class USBreakoutStrategy(MultiSymbolStrategy):
         self._holding_direction: Dict[str, str] = {s: "flat" for s in self._symbols}
         self._entry_bar_idx: Dict[str, int] = {s: 0 for s in self._symbols}
         self._highest_since_entry: Dict[str, float] = {}
-        self._bar_count: int = 0
+        self._lowest_since_entry: Dict[str, float] = {}
+        self._bar_count: Dict[str, int] = {s: 0 for s in self._symbols}
 
     def initialize(self) -> None:
         self._set_state(StrategyState.INITIALIZED)
@@ -68,7 +69,7 @@ class USBreakoutStrategy(MultiSymbolStrategy):
 
     def on_bar(self, symbol: str, bar: dict, stock_frame: StockFrame) -> Signal:
         try:
-            self._bar_count += 1
+            self._bar_count[symbol] += 1
             return self._evaluate(symbol, stock_frame)
         except Exception as exc:
             logger.error("USBreakoutStrategy.evaluate failed for %s: %s", symbol, exc)
@@ -90,28 +91,62 @@ class USBreakoutStrategy(MultiSymbolStrategy):
             return
 
         direction = str(order_dict.get("instruction", order_dict.get("side", ""))).upper()
-        if direction in ("SELL", "SELL_SHORT"):
+        if direction in ("BUY", "SELL_SHORT"):
+            self._holding[symbol] = True
+            self._holding_direction[symbol] = "long" if direction == "BUY" else "short"
+            self._entry_bar_idx[symbol] = self._bar_count[symbol]
+            self.set_symbol_state(symbol, "holding", True)
+        elif direction in ("SELL", "BUY_TO_COVER"):
             self._holding[symbol] = False
             self._holding_direction[symbol] = "flat"
             self._highest_since_entry.pop(symbol, None)
+            self._lowest_since_entry.pop(symbol, None)
             self.set_symbol_state(symbol, "holding", False)
-        elif direction in ("BUY", "BUY_TO_COVER"):
-            self._holding[symbol] = True
-            self._entry_bar_idx[symbol] = self._bar_count
-            self.set_symbol_state(symbol, "holding", True)
         else:
             if self._holding.get(symbol, False):
                 self._holding[symbol] = False
                 self._holding_direction[symbol] = "flat"
                 self._highest_since_entry.pop(symbol, None)
+                self._lowest_since_entry.pop(symbol, None)
                 self.set_symbol_state(symbol, "holding", False)
             else:
                 self._holding[symbol] = True
-                self._entry_bar_idx[symbol] = self._bar_count
+                self._entry_bar_idx[symbol] = self._bar_count[symbol]
                 self.set_symbol_state(symbol, "holding", True)
 
     def get_holding(self, symbol: str) -> bool:
         return bool(self._holding.get(symbol, False))
+
+    def sync_positions(self, positions: Dict[str, float]) -> None:
+        """Synchronize holding/direction state with a broker position snapshot.
+
+        Positive quantity → long, negative quantity → short, zero → flat.
+        Trailing-stop floors/peaks are re-seeded from the first bar after sync.
+
+        Args:
+            positions: symbol → quantity (per the broker account).
+        """
+        for symbol in self._symbols:
+            try:
+                qty = float(positions.get(symbol, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                qty = 0.0
+            self._holding[symbol] = qty != 0.0
+            self._holding_direction[symbol] = "long" if qty > 0 else ("short" if qty < 0 else "flat")
+            if qty == 0:
+                self._highest_since_entry.pop(symbol, None)
+                self._lowest_since_entry.pop(symbol, None)
+            else:
+                self._entry_bar_idx[symbol] = self._bar_count.get(symbol, 0)
+                if qty > 0:
+                    self._highest_since_entry[symbol] = float("-inf")
+                else:
+                    self._lowest_since_entry[symbol] = float("inf")
+            self.set_symbol_state(symbol, "holding", qty != 0.0)
+            logger.info(
+                "USBreakoutStrategy %s synced position for %s: qty=%s holding=%s direction=%s",
+                self._strategy_id, symbol, qty, self._holding[symbol], self._holding_direction[symbol],
+            )
 
     def _evaluate(self, symbol: str, stock_frame: StockFrame) -> Signal:
         frame = stock_frame.frame
@@ -162,20 +197,31 @@ class USBreakoutStrategy(MultiSymbolStrategy):
 
         # Exit logic
         if holding:
-            self._highest_since_entry[symbol] = max(self._highest_since_entry.get(symbol, 0.0), close)
+            direction = self._holding_direction.get(symbol, "long")
             entry_bar = self._entry_bar_idx.get(symbol, 0)
-            bars_held = self._bar_count - entry_bar
+            bars_held = self._bar_count.get(symbol, 0) - entry_bar
 
             if bars_held > int(self._parameters["max_holding_days"]):
-                action = SignalAction.SELL if self._holding_direction.get(symbol) == "long" else SignalAction.BUY_TO_COVER
+                action = SignalAction.SELL if direction == "long" else SignalAction.BUY_TO_COVER
                 return self._make_signal(symbol, action, 0.9, f"Time stop: held {bars_held} bars")
 
-            if close < self._highest_since_entry.get(symbol, 0.0) * (1.0 - trailing_pct):
-                action = SignalAction.SELL if self._holding_direction.get(symbol) == "long" else SignalAction.BUY_TO_COVER
-                return self._make_signal(
-                    symbol, action, 0.85,
-                    f"Trailing stop: close {close:.2f} < high {self._highest_since_entry[symbol]:.2f} × (1-{trailing_pct})",
-                )
+            if direction == "long":
+                # Trailing stop trails the HIGHEST close since entry (as designed).
+                self._highest_since_entry[symbol] = max(self._highest_since_entry.get(symbol, close), close)
+                if close < self._highest_since_entry[symbol] * (1.0 - trailing_pct):
+                    return self._make_signal(
+                        symbol, SignalAction.SELL, 0.85,
+                        f"Trailing stop: close {close:.2f} < high {self._highest_since_entry[symbol]:.2f} × (1-{trailing_pct})",
+                    )
+            else:
+                # Short positions trail the LOWEST close since entry; a short is
+                # covered on strength above that floor, not below the peak.
+                self._lowest_since_entry[symbol] = min(self._lowest_since_entry.get(symbol, close), close)
+                if close > self._lowest_since_entry[symbol] * (1.0 + trailing_pct):
+                    return self._make_signal(
+                        symbol, SignalAction.BUY_TO_COVER, 0.85,
+                        f"Short trailing stop: close {close:.2f} > low {self._lowest_since_entry[symbol]:.2f} × (1+{trailing_pct})",
+                    )
 
             return Signal(
                 symbol=symbol, action=SignalAction.HOLD,
@@ -210,6 +256,7 @@ class USBreakoutStrategy(MultiSymbolStrategy):
             self._record_signal(signal)
             self._set_state(StrategyState.RUNNING)
             self._holding_direction[symbol] = "short"
+            self._lowest_since_entry[symbol] = close
             return signal
 
         return Signal(

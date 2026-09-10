@@ -27,14 +27,14 @@ import json
 import os
 import sys
 import time as _sleep
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from pyrobot.data.metals_provider import DEFAULT_METALS, MetalsProvider, TRADING_CALENDAR
+from pyrobot.data.metals_provider import DEFAULT_METALS, TRADING_CALENDAR, MetalsProvider
 
 _EASTERN = ZoneInfo("America/New_York")
 
@@ -75,22 +75,29 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
             mode = MODE_NOW
         elif arg == "--symbols" and i + 1 < len(argv):
             symbols = [s.strip().upper() for s in argv[i + 1].split(",") if s.strip()]
-            i += 2; continue
+            i += 2
+            continue
         elif arg == "--seed-bars" and i + 1 < len(argv):
             seed_bars = max(1, int(argv[i + 1]))
-            i += 2; continue
+            i += 2
+            continue
         elif arg == "--data-dir" and i + 1 < len(argv):
             data_dir = argv[i + 1]
-            i += 2; continue
+            i += 2
+            continue
         i += 1
     return {"mode": mode, "symbols": symbols, "seed_bars": seed_bars, "data_dir": Path(data_dir).resolve()}
 
 
 def _report_dir(root: Path) -> Path:
-    p = root / "data" / "reports"; p.mkdir(parents=True, exist_ok=True); return p
+    p = root / "data" / "reports"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 def _audit_dir(root: Path) -> Path:
-    p = root / "data" / "audit"; p.mkdir(parents=True, exist_ok=True); return p
+    p = root / "data" / "audit"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 def _save_report(payload: Dict[str, Any], root: Path) -> Path:
     out = _report_dir(root) / f"metals_paper_session_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}.json"
@@ -198,10 +205,16 @@ def run_session(opts: Dict[str, Any], report: Dict[str, Any], *, dry_run: bool =
     print("1. Building paper pipeline ...")
     pipeline = build_default_pipeline(
         symbols=symbols, initial_balance=100_000.0, audit_path=audit_path, strategy=strategy,
+        mode=("dry_run" if dry_run else "paper"),
     )
     report["dry_run"] = dry_run
     report["audit_path"] = audit_path
     report["trading_calendar"] = TRADING_CALENDAR
+
+    state_path = root / "data" / "paper_state" / "metals_paper.json"
+    restored = pipeline.broker.load_state(state_path)
+    strategy.sync_positions(pipeline.broker.position_map())
+    report["broker_state"] = {"loaded": restored, "path": str(state_path), "positions": pipeline.broker.position_map()}
 
     print("2. Seeding daily history ...")
     seed_entries: Dict[str, List[Any]] = {}
@@ -278,6 +291,8 @@ def run_session(opts: Dict[str, Any], report: Dict[str, Any], *, dry_run: bool =
     report["positions"] = result["positions"]
     _log_session(root, "session_end", status="completed", equity=report["equity"],
                  orders=sorted(f"{o.side.value}:{o.status.value}" for o in orders))
+    pipeline.broker.save_state(state_path)
+    report["broker_state"]["saved_path"] = str(state_path)
     return report
 
 
@@ -293,7 +308,8 @@ def main() -> None:
     try:
         opts = _parse_args(sys.argv[1:])
     except ValueError as exc:
-        print(f"[error] {exc}"); sys.exit(1)
+        print(f"[error] {exc}")
+        sys.exit(1)
     report["symbols"] = opts["symbols"]
     report["mode"] = opts["mode"]
     _log_session(opts["data_dir"], "session_start", mode=opts["mode"], symbols=opts["symbols"])

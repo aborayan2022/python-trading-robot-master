@@ -93,14 +93,17 @@ class MetalsTrendFollowStrategy(MultiSymbolStrategy):
             return
 
         direction = str(order_dict.get("instruction", order_dict.get("side", ""))).upper()
-        if direction in ("SELL", "SELL_SHORT"):
+        if direction in ("SELL", "BUY_TO_COVER"):
             self._holding[symbol] = False
             self._holding_direction[symbol] = "flat"
             self._entry_high.pop(symbol, None)
             self._entry_low.pop(symbol, None)
             self.set_symbol_state(symbol, "holding", False)
-        elif direction in ("BUY", "BUY_TO_COVER"):
+        elif direction in ("BUY", "SELL_SHORT"):
+            # Entry fills take the position's direction from the fill side; the
+            # strategy recorded the same direction at signal time already.
             self._holding[symbol] = True
+            self._holding_direction[symbol] = "long" if direction == "BUY" else "short"
             self._entry_high.setdefault(symbol, 0.0)
             self._entry_low.setdefault(symbol, float("inf"))
             self.set_symbol_state(symbol, "holding", True)
@@ -119,6 +122,35 @@ class MetalsTrendFollowStrategy(MultiSymbolStrategy):
 
     def get_holding(self, symbol: str) -> bool:
         return bool(self._holding.get(symbol, False))
+
+    def sync_positions(self, positions: Dict[str, float]) -> None:
+        """Synchronize holding/direction state with a broker position snapshot.
+
+        Called at session startup so cross-session time-stop/trailing exits work
+        correctly even when a position was opened in an earlier session.
+        Positive quantity → long, negative quantity → short, zero → flat.
+
+        Args:
+            positions: symbol → quantity (per the broker account).
+        """
+        for symbol in self._symbols:
+            try:
+                qty = float(positions.get(symbol, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                qty = 0.0
+            self._holding[symbol] = qty != 0.0
+            self._holding_direction[symbol] = "long" if qty > 0 else ("short" if qty < 0 else "flat")
+            if qty == 0:
+                self._entry_high.pop(symbol, None)
+                self._entry_low.pop(symbol, None)
+            else:
+                self._entry_high.setdefault(symbol, 0.0)
+                self._entry_low.setdefault(symbol, float("inf"))
+            self.set_symbol_state(symbol, "holding", qty != 0.0)
+            logger.info(
+                "MetalsTrendFollowStrategy %s synced position for %s: qty=%s holding=%s direction=%s",
+                self._strategy_id, symbol, qty, self._holding[symbol], self._holding_direction[symbol],
+            )
 
     def _evaluate(self, symbol: str, stock_frame: StockFrame) -> Signal:
         frame = stock_frame.frame

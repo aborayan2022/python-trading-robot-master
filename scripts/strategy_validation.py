@@ -69,7 +69,14 @@ def main() -> None:
             },
         })
 
-    rows.sort(key=lambda r: r["strategy"])
+    rows.sort(key=lambda r: (r["strategy"], r["report"]))
+    # Keep the latest report per strategy so stale duplicates never inflate —
+    # or worse, split — a strategy's validation result.
+    latest: dict = {}
+    for r in rows:
+        if r["strategy"] not in latest or r["report"] > latest[r["strategy"]]["report"]:
+            latest[r["strategy"]] = r
+    rows = [latest[k] for k in sorted(latest)]
     payload = {
         "title": "Per-Strategy Walk-Forward + Monte Carlo Validation",
         "generated_at": datetime.now(timezone.utc).isoformat(),

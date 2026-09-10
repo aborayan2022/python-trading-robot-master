@@ -19,11 +19,9 @@ from pyrobot.data.sectors import (
 )
 from pyrobot.exceptions import ExecutionError
 from pyrobot.models.order import OrderSide, OrderState
-from pyrobot.models.signal import SignalAction
 from pyrobot.risk.exposure import ExposureMonitor
 from pyrobot.risk.limits import RiskLimits
 from pyrobot.strategies.us_trend import USTrendFollowStrategy
-
 
 # ── 3.1.2 Sector map ────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ validation for metals/crypto data.
 """
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pandas as pd
@@ -22,9 +22,7 @@ def _make_metal_frame(symbol: str = "GC=F", n_rows: int = 500) -> pd.DataFrame:
     """Deterministic gold-like daily data with uptrend."""
     base_price = 1800.0
     rows = []
-    start = datetime(2021, 1, 1, tzinfo=timezone.utc)
     for i in range(n_rows):
-        ts = start + timedelta(days=i)
         drift = 0.0003 * i
         cyc = 30 * math.sin(i / 30)
         close = base_price * (1 + drift) + cyc
@@ -46,9 +44,7 @@ def _make_crypto_frame(symbol: str = "BTC-USD", n_rows: int = 500) -> pd.DataFra
     """Deterministic bitcoin-like daily data with high volatility."""
     base_price = 30000.0
     rows = []
-    start = datetime(2021, 1, 1, tzinfo=timezone.utc)
     for i in range(n_rows):
-        ts = start + timedelta(days=i)
         drift = 0.001 * i
         cyc = 2000 * math.sin(i / 20)
         close = base_price * (1 + drift) + cyc

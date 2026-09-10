@@ -45,6 +45,8 @@ def main() -> None:
         initial_balance=100_000.0,
         years=years,
         cost_model=cost_model,
+        # Crypto trades 24/7/365 — annualize daily Sharpe on 365 bars.
+        periods_per_year=365,
     )
 
     if dry_run:

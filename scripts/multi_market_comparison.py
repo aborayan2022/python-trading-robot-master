@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = ROOT / "data" / "reports"
 
 MARKET_LABELS = {
+    "USTrendFollowStrategy": "US equities (trend-follow)",
     "us_trend": "US equities (trend-follow)",
     "us_mean_reversion": "US equities (mean reversion)",
     "us_breakout": "US equities (breakout)",
@@ -27,6 +28,19 @@ MARKET_LABELS = {
     "metals_momentum": "Precious metals (momentum)",
     "crypto_trend": "Crypto (trend / breakout)",
     "crypto_mean_rev": "Crypto (mean reversion)",
+}
+
+# Group strategies into real markets (3) instead of one "market" per strategy (7),
+# so market_count reflects actual markets traded.
+MARKET_GROUPS = {
+    "USTrendFollowStrategy": "US",
+    "us_trend": "US",
+    "us_mean_reversion": "US",
+    "us_breakout": "US",
+    "metals_trend": "Metals",
+    "metals_momentum": "Metals",
+    "crypto_trend": "Crypto",
+    "crypto_mean_rev": "Crypto",
 }
 
 
@@ -47,7 +61,8 @@ def main() -> None:
         bh_return = bh.get("total_return_pct")
         rows.append({
             "strategy": strategy,
-            "market": MARKET_LABELS.get(strategy, strategy),
+            "market": MARKET_GROUPS.get(strategy, strategy),
+            "strategy_label": MARKET_LABELS.get(strategy, strategy),
             "report": report.name,
             "generated_at": data.get("generated_at"),
             "symbols": data.get("symbols", []),

@@ -139,3 +139,9 @@ tests/config.py
 .vscode/settings.json
 indicators/
 New Text Document.txt
+
+# Paper-session runtime artifacts (regenerated daily by cron; not committed)
+data/paper_state/
+data/audit/*paper_session*.jsonl
+data/reports/*paper_session*.json
+data/reports/*paper_session*.jsonl

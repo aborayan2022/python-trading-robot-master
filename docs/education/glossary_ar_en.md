@@ -22,17 +22,17 @@
 | عامل الربح | Profit Factor | نسبة إجمالي الأرباح إلى إجمالي الخسائر. Ratio of gross profits to gross losses. |
 | أقصى تراجع | Maximum Drawdown | أقصى انخفاض من الذروة إلى الحضيض. Maximum decline from peak to trough. |
 | نسبة شارب | Sharpe Ratio | العائد المعدل حسب المخاطر. Risk-adjusted return metric. |
-| نسبة سورتينو | Sortino Ratio |Sharpe Ratio لكن يهمل التقلبات الإيجابية. Like Sharpe but ignores upside volatility. |
+| نسبة سورتينو | Sortino Ratio | مثل نسبة شارب لكن تهمل التقلبات الإيجابية. Like Sharpe but ignores upside volatility. |
 | جودة البيانات | Data Quality | صحة واتساق بيانات السوق قبل استخدامها. Correctness and consistency of market data before use. |
 | تسرب البيانات | Data Leakage | استخدام معلومات مستقبلية في التدريب. Using future information during training. |
-| التحيز المわり | Look-ahead Bias | اتخاذ قرار بناءً على معلومة لم تكن متاحة وقتها. Making a decision based on information not available at that time. |
-| التحيز فوق ال.measure | Overfitting | النموذج يحفظ التدريب لكن يفشل في البيانات الجديدة. Model memorizes training but fails on new data. |
+| التحيز المستقبلي | Look-ahead Bias | اتخاذ قرار بناءً على معلومة لم تكن متاحة وقتها. Making a decision based on information not available at that time. |
+| الإفراط في التكييف | Overfitting | النموذج يحفظ التدريب لكن يفشل في البيانات الجديدة. Model memorizes training but fails on new data. |
 | التداول الورقي | Paper Trading | محاكاة التداول بأموال وهمية. Simulated trading with virtual money. |
 | الظل | Shadow Mode | النظام يقرر لكن لا ينفذ. System decides but does not execute. |
 | التداول الحي | Live Trading | التداول بأموال حقيقية. Trading with real money. |
 | تقويم التداول | Trading Calendar | جدول ساعات وأيام التداول لكل سوق. Trading hours and days schedule for each market. |
 | فترات التداول | Trading Hours | الأوقات الرسمية لتداول أوراق السوق. Official trading times for market securities. |
-| السيولة | Liquidity | سهولة الشراء والبيع без تأثير كبير على السعر. Ease of buying/selling without significant price impact. |
-| التأثيرxecution | Market Impact | تأثير الصفقة الكبيرة على سعر السوق. Effect of large orders on market price. |
+| السيولة | Liquidity | سهولة الشراء والبيع بدون تأثير كبير على السعر. Ease of buying/selling without significant price impact. |
+| تأثير السوق | Market Impact | تأثير الصفقة الكبيرة على سعر السوق. Effect of large orders on market price. |
 | محفظة استثمارية | Portfolio | مجموعة الأوراق المالية التي يمتلكها المستثمر. Collection of securities held by an investor. |
 | التنويع | Diversification | توزيع الاستثمار على أصول مختلفة لتقليل المخاطر. Spreading investments across different assets to reduce risk. |

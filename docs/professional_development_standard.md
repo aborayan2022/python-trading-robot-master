@@ -1,6 +1,6 @@
 # Professional Development Standard
 
-**Status:** Ratified 2026-09-06
+**Status:** Ratified 2026-09-06 · **Amended 2026-09-10 (Wave 5 — decision-memo verification procedure)**
 **Applies to:** every feature, fix, or strategy decision in this repository
 **Origin:** `reports/بحث_مشاريع_مشابهة_ودروس_مستفادة.md` (2026-09-06)
 
@@ -72,6 +72,28 @@ release must be reviewed against these seven failure modes before sign-off:
 
 **Gate:** a release cannot be tagged without an explicit row-by-row review of this
 table for the affected components.
+
+## 3a. Decision-Memo Verification Procedure (added Wave 5)
+
+A decision memo (format per §9 of the multi-market wave order, saved as
+`reports/decision_memo_<market>.md` and mirrored into
+`reports/continuous_research_log.md`) is **mandatory before any implementation**
+for a new market, strategy family, or execution-layer change. Verification:
+
+1. **Order:** the memo must exist and be APPROVED **before** implementation code
+   lands. A memo written after its implementation is a **sequence breach**.
+2. **Post-hoc handling:** if a breach is discovered (as in Wave 5 — metals and
+   crypto memos written after Wave 1), the memo MUST carry a `Post-hoc
+   Acknowledgment` section stating the breach explicitly and extracting lessons
+   learned. Suppressing the breach is a release blocker.
+3. **Content:** the memo must cover the eight §9 fields (why / data source /
+   trading calendar / expected strategies / benchmark / risks / cost model /
+   decision).
+4. **Linkage:** every memo is referenced from the research log; acceptance items
+   (`git diff`) for the market must be traceable to a memo entry.
+5. **Freshness:** the memo's risk and benchmark sections must still match reality
+   at release time (Wave 5 revalidation showed the metal/crypto benchmark
+   numbers drifting from the pre-implementation estimates — re-verify).
 
 ## 4. Approved Reference Library
 
