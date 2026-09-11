@@ -117,6 +117,20 @@ that did NOT reproduce from the committed code — made this a hard rule:
    `data/metrics/runtime_metrics.jsonl` are live session artifacts (always
    appended by smoke/run) and are git-ignored, so they can never make the tree
    appear dirty.
+5. **Corollary — the untracked-code blind spot (consultant approval §3, 2026-09-11):**
+   `dirty_tree` intentionally ignores *untracked* (`??`) entries so a sequential
+   report batch does not self-flag. The known cost: a **new, untracked code file**
+   (e.g. a fresh `.py` in the working tree) does NOT trip the flag. The corollary
+   rules that close this gap:
+   - any new `.py` (or other code) file entering service must be committed in the
+     **same batch** as the reports it produces — never aggregated from an uncommitted
+     tree;
+   - no report generated while untracked code files exist in the working tree is
+     accepted as a release aggregate.
+   - The aggregators (`multi_market_comparison.py`, `strategy_validation.py`) enforce
+     provenance: a strategy whose latest report lacks `provenance.git_commit` or shows
+     `dirty_tree: true` is listed as **PROVENANCE REJECTED** and the run exits
+     non-zero, failing the weekly research session.
 
 ## 4. Approved Reference Library
 

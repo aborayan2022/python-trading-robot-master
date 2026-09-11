@@ -5,9 +5,17 @@ For every backtest report in ``data/reports/*_backtest_*.json`` this script:
 1. Verifies the walk-forward validator is importable/constructible (the
    walk-forward machinery lives in ``pyrobot/backtesting/walk_forward.py`` and
    is already used by the ML training pipeline in ``pyrobot/ai/training.py``).
+   Actual walk-forward **figures** are a Wave-6 gate (consultant approval §4a):
+   ``walk_forward.available`` stays ``false`` and ``results`` stays ``null``
+   until a Wave-6 run populates them — ``available: true`` without figures is
+   no longer acceptable.
 2. Runs a Monte Carlo bootstrap over the honest backtest's realized trade PnLs
    (``pyrobot.backtesting.monte_carlo.MonteCarloSimulator``) to estimate a
    stress-case return distribution and probability of excessive drawdown.
+
+The latest report per strategy must carry valid provenance (governance §3b):
+a missing ``git_commit`` or a dirty-tree run is listed but rejected, and the
+script exits non-zero so the weekly research session surfaces it.
 
 Results are aggregated into ``data/reports/strategy_validation.json``.
 
@@ -16,6 +24,7 @@ Run:  .venv/bin/python scripts/strategy_validation.py
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,9 +37,16 @@ REPORTS_DIR = ROOT / "data" / "reports"
 WALK_FORWARD_CONFIG = {"n_splits": 3, "train_period_days": 20, "test_period_days": 5, "embargo_days": 1}
 
 
+def _provenance_ok(data: dict) -> bool:
+    """A report is aggregation-eligible only with a commit SHA from a clean tree."""
+    prov = data.get("provenance") or {}
+    return bool(prov.get("git_commit")) and prov.get("dirty_tree") is False
+
+
 def main() -> None:
-    # Walk-forward constructor proof (acceptance check).
-    _validator = WalkForwardValidator(**WALK_FORWARD_CONFIG)
+    # Walk-forward constructor proof (acceptance check). Figures themselves are
+    # a Wave-6 gate; until then `available` is false and `results` is null.
+    _ = WalkForwardValidator(**WALK_FORWARD_CONFIG)
 
     rows = []
     for report in sorted(REPORTS_DIR.glob("*_backtest_*.json")):
@@ -45,6 +61,7 @@ def main() -> None:
         honest = data.get("honest_backtest") or {}
         trades = honest.get("trades") or []
         summary = honest.get("summary") or {}
+        prov = data.get("provenance") or {}
 
         mc = MonteCarloSimulator(
             n_simulations=1000, initial_capital=100_000.0,
@@ -56,10 +73,20 @@ def main() -> None:
             "strategy": strategy,
             "report": report.name,
             "generated_at": data.get("generated_at"),
+            "provenance": {
+                "git_commit": prov.get("git_commit"),
+                "dirty_tree": prov.get("dirty_tree"),
+                "ok": _provenance_ok(data),
+            },
             "walk_forward": {
                 "validator": "WalkForwardValidator",
-                "available": True,
+                "validator_constructible": True,
+                "available": False,
+                "results": None,
                 "config": WALK_FORWARD_CONFIG,
+                "note": "Walk-forward figures populate this field in Wave 6 "
+                        "(consultant approval §4a); a release cannot claim "
+                        "walk-forward validation without them.",
             },
             "monte_carlo": mc_report.summary(),
             "realized": {
@@ -84,6 +111,15 @@ def main() -> None:
     for r in latest.values():
         r.pop("_key", None)
     rows = [latest[k] for k in sorted(latest)]
+
+    rejected = [r for r in rows if not r["provenance"]["ok"]]
+    for r in rejected:
+        print(f"PROVENANCE REJECTED: {r['strategy']} -> {r['report']} "
+              f"(git_commit={r['provenance']['git_commit']!r}, "
+              f"dirty_tree={r['provenance']['dirty_tree']!r}). Regenerate from a "
+              "clean commit before this validation is eligible as a release aggregate.",
+              file=sys.stderr)
+
     payload = {
         "title": "Per-Strategy Walk-Forward + Monte Carlo Validation",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -99,6 +135,9 @@ def main() -> None:
               f"MC median={mc['median_return_pct']}% (p5={mc['p5_return_pct (worst 5%)']}%) "
               f"ruin={mc['ruin_probability_pct']}%")
     print(f"Report: {out}")
+
+    if rejected:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
