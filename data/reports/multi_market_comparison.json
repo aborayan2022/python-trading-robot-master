@@ -1,6 +1,6 @@
 {
   "title": "Multi-Market Backtest Comparison",
-  "generated_at": "2026-09-11T00:13:42.885521+00:00",
+  "generated_at": "2026-09-11T08:03:17.173861+00:00",
   "market_count": 3,
   "strategy_count": 7,
   "strategies": [
@@ -34,8 +34,8 @@
       "strategy": "crypto_mean_rev",
       "market": "Crypto",
       "strategy_label": "Crypto (mean reversion)",
-      "report": "crypto_mean_rev_backtest_20260911_000916.json",
-      "generated_at": "2026-09-11T00:09:16.784140+00:00",
+      "report": "crypto_mean_rev_backtest_20260911_074556.json",
+      "generated_at": "2026-09-11T07:45:56.715111+00:00",
       "symbols": [
         "BTC-USD",
         "ETH-USD"
@@ -52,8 +52,8 @@
       "strategy": "crypto_trend",
       "market": "Crypto",
       "strategy_label": "Crypto (trend / breakout)",
-      "report": "crypto_trend_backtest_20260911_000747.json",
-      "generated_at": "2026-09-11T00:07:47.455199+00:00",
+      "report": "crypto_trend_backtest_20260911_074718.json",
+      "generated_at": "2026-09-11T07:47:18.697145+00:00",
       "symbols": [
         "BTC-USD",
         "ETH-USD"
@@ -70,8 +70,8 @@
       "strategy": "metals_momentum",
       "market": "Metals",
       "strategy_label": "Precious metals (momentum)",
-      "report": "metals_momentum_backtest_20260911_000634.json",
-      "generated_at": "2026-09-11T00:06:34.957853+00:00",
+      "report": "metals_momentum_backtest_20260911_074845.json",
+      "generated_at": "2026-09-11T07:48:45.818836+00:00",
       "symbols": [
         "GC=F",
         "SI=F",
@@ -90,8 +90,8 @@
       "strategy": "metals_trend",
       "market": "Metals",
       "strategy_label": "Precious metals (trend-follow)",
-      "report": "metals_trend_backtest_20260911_000520.json",
-      "generated_at": "2026-09-11T00:05:20.582351+00:00",
+      "report": "metals_trend_backtest_20260911_075047.json",
+      "generated_at": "2026-09-11T07:50:47.962234+00:00",
       "symbols": [
         "GC=F",
         "SI=F",
@@ -110,8 +110,8 @@
       "strategy": "us_breakout",
       "market": "US",
       "strategy_label": "US equities (breakout)",
-      "report": "us_breakout_backtest_20260910_235654.json",
-      "generated_at": "2026-09-10T23:56:54.996714+00:00",
+      "report": "us_breakout_backtest_20260911_075456.json",
+      "generated_at": "2026-09-11T07:54:56.604948+00:00",
       "symbols": [
         "AAPL",
         "MSFT",
@@ -136,8 +136,8 @@
       "strategy": "us_mean_reversion",
       "market": "US",
       "strategy_label": "US equities (mean reversion)",
-      "report": "us_mean_reversion_backtest_20260911_000337.json",
-      "generated_at": "2026-09-11T00:03:37.087425+00:00",
+      "report": "us_mean_reversion_backtest_20260911_080240.json",
+      "generated_at": "2026-09-11T08:02:40.935653+00:00",
       "symbols": [
         "AAPL",
         "MSFT",

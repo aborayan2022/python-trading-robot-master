@@ -338,3 +338,40 @@ committed HEAD.
 - `data/reports/multi_market_comparison.json`, `data/reports/strategy_validation.json` —
   regenerated.
 - `data/reports/*_backtest_20260911_*.json` — final honest full runs.
+
+---
+
+## 2026-09-11 (2nd) — Provenance & clean-tree rule (review follow-up)
+
+**Observation:** the reviewer independently reproduced `metals_trend` (−57.48%, 442
+trades) from clean HEAD, confirming the `20260911_00xxxx` batch. Two remaining gaps were
+flagged and closed here: (a) the supervisor market profile could leak `PYROBOT_SYMBOLS`
+(default `MSFT,AAPL`) into the metals/crypto provider, dataset, and strategy; and (b) no
+report carried the git SHA or dirty-tree flag, so "run from clean HEAD" was only
+verifiable by re-running.
+
+**Changes:**
+- Supervisor market profile derives symbols from the market provider's own defaults
+  (`DEFAULT_METALS`/`DEFAULT_CRYPTO`); `PYROBOT_SYMBOLS` no longer reaches the provider,
+  data cache, or strategy. Test asserts no `symbols` kwarg reaches `DataProviderRegistry.create`.
+- Reports now embed `provenance: {git_commit, dirty_tree}` (`runner.py` +
+  `us_strategy_backtest.py`); `dirty_tree` reflects only tracked-file changes, so
+  sequential report batches don't self-flag. Governance rule added
+  (`docs/professional_development_standard.md` §3b): provenance required, clean tree
+  before claims, reproducibility check from recorded commit.
+- `data/audit/ledger.jsonl` + `data/metrics/runtime_metrics.jsonl` untracked and git-ignored
+  (live session artifacts — appended by every smoke/run, so they could never stay clean).
+- Interim `20260910_16xxxx` reports renamed `*_backtest_superseded_20260910_*`.
+
+**Final authoritative batch:** `data/reports/*_backtest_20260911_07xxxx.json`, produced by
+running the six scripts from clean commit `522f98e` (`dirty_tree=false`), numbers identical
+to the reviewer's reproduction figure-for-figure.
+
+**Impact on code:**
+- `pyrobot/console/supervisor.py` — market symbols from provider defaults.
+- `pyrobot/backtesting/runner.py`, `us_strategy_backtest.py` — `_git_provenance()`.
+- `docs/professional_development_standard.md` — §3b provenance/clean-tree rule.
+- `tests/test_console.py`, `tests/test_multi_market_wave5.py` — market-isolation +
+  provenance tests.
+- `.gitignore`, `data/reports/*_superseded_20260910_*`, `data/audit/ledger.jsonl`,
+  `data/metrics/runtime_metrics.jsonl` (untracked).
