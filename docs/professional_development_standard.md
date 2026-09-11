@@ -1,6 +1,6 @@
 # Professional Development Standard
 
-**Status:** Ratified 2026-09-06 · **Amended 2026-09-10 (Wave 5 — decision-memo verification procedure)**
+**Status:** Ratified 2026-09-06 · **Amended 2026-09-10 (Wave 5 — decision-memo verification procedure)** · **Amended 2026-09-11 (Wave 5 close-out — backtest provenance & clean-tree rule)**
 **Applies to:** every feature, fix, or strategy decision in this repository
 **Origin:** `reports/بحث_مشاريع_مشابهة_ودروس_مستفادة.md` (2026-09-06)
 
@@ -94,6 +94,29 @@ for a new market, strategy family, or execution-layer change. Verification:
 5. **Freshness:** the memo's risk and benchmark sections must still match reality
    at release time (Wave 5 revalidation showed the metal/crypto benchmark
    numbers drifting from the pre-implementation estimates — re-verify).
+
+## 3b. Backtest Provenance & Clean-Tree Rule (added Wave 5 close-out)
+
+Every backtest report must be reproducible from the exact code that generated it.
+The 2026-09-10 incident — advisory figures produced from an in-flight working tree
+that did NOT reproduce from the committed code — made this a hard rule:
+
+1. **Provenance fields:** every report written by `MultiMarketBacktest` (and the
+   standalone `us_strategy_backtest.py`) records a `provenance` object with
+   `git_commit` (HEAD SHA) and `dirty_tree` (True when any tracked files are
+   modified or untracked non-ignored files exist at run time). A report without
+   a SHA, or with `dirty_tree: true`, is **not** a release candidate.
+2. **Clean tree before claims:** no report generation, comparison, validation, or
+   "clean-tree" statement while uncommitted code changes exist in the working
+   tree. Either commit the changes or stash them first. Re-run and re-record
+   *after* the final commit; never backfill numbers from a pre-commit tree.
+3. **Reproducibility check:** a claimed result should be reproducible by running
+   the report file's own script from the recorded commit
+   (`git checkout <git_commit> && python backtest_<market>.py`).
+4. **Telemetry is untracked:** `data/audit/ledger.jsonl` and
+   `data/metrics/runtime_metrics.jsonl` are live session artifacts (always
+   appended by smoke/run) and are git-ignored, so they can never make the tree
+   appear dirty.
 
 ## 4. Approved Reference Library
 

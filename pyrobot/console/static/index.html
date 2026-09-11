@@ -56,13 +56,13 @@
         <!-- Live Connection Status -->
         <div class="stream-status-badge" id="stream-status" title="Real-time SSE Connection">
           <span class="pulse-dot"></span>
-          <span id="stream-status-text">LIVE SSE</span>
+          <span id="stream-status-text">…</span>
         </div>
 
         <!-- Role Badge -->
         <div class="role-badge" id="current-role-badge">
           <span class="role-icon">👤</span>
-          <span id="current-role-text">MANAGER</span>
+          <span id="current-role-text">VIEWER</span>
         </div>
 
         <!-- Language Switcher -->
@@ -85,9 +85,9 @@
           <div class="metric-card card-status">
             <div class="metric-header">
               <span class="metric-label" data-i18n="metric_engine_status">حالة المحرك</span>
-              <span class="status-indicator-pill" id="card-state-pill">RUNNING</span>
+              <span class="status-indicator-pill" id="card-state-pill">—</span>
             </div>
-            <div class="metric-value font-mono" id="card-state-value">RUNNING</div>
+            <div class="metric-value font-mono" id="card-state-value">—</div>
             <div class="metric-footer text-muted" id="card-profile-sub">Profile: Replay (Paper)</div>
           </div>
 
@@ -96,7 +96,7 @@
               <span class="metric-label" data-i18n="metric_equity">رأس المال (Equity)</span>
               <span class="metric-icon">💰</span>
             </div>
-            <div class="metric-value font-mono" id="card-equity">$100,000.00</div>
+            <div class="metric-value font-mono" id="card-equity">—</div>
             <div class="metric-footer" id="card-daily-pnl">
               <span class="pnl-tag font-mono positive">+0.00 (+0.00%)</span>
               <span class="text-muted" data-i18n="sub_today">اليوم</span>
@@ -237,7 +237,7 @@
           <div class="panel control-box">
             <div class="panel-header">
               <h3 data-i18n="ctrl_lifecycle_title">دورة حياة المحرك</h3>
-              <span class="status-indicator-pill" id="ctrl-state-badge">STOPPED</span>
+              <span class="status-indicator-pill" id="ctrl-state-badge">—</span>
             </div>
             <div class="btn-group-lifecycle">
               <button class="btn btn-success" id="btn-ctrl-start">
@@ -764,7 +764,7 @@
     <div class="toast-container" id="toast-container"></div>
   </div>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 
 </html>

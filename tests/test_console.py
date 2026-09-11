@@ -197,13 +197,17 @@ class TestSupervisorLifecycle:
 
     def test_market_profile_supervisor_start(self, monkeypatch, tmp_path):
         # The market profile must resolve the provider via DataProviderRegistry
-        # and carry that market's sector map + risk limits into the pipeline.
+        # and carry that market's sector map + risk limits into the pipeline —
+        # and it must NOT leak PYROBOT_SYMBOLS (default MSFT,AAPL) into the
+        # market provider or strategy, which would run metals/crypto on US IPOs.
         import pandas as pd
 
         from pyrobot.data.registry import DataProviderRegistry
 
         monkeypatch.setenv("PYROBOT_MARKET", "crypto")
         monkeypatch.delenv("PYROBOT_PROFILE", raising=False)
+
+        created_kwargs: dict = {}
 
         class _StubProvider:
             def load_cached(self):
@@ -212,10 +216,13 @@ class TestSupervisorLifecycle:
                     {"open": [100.0] * 210, "high": [100.0] * 210, "low": [100.0] * 210,
                      "close": [100.0] * 210, "volume": [1e6] * 210}, index=idx)}
 
-        monkeypatch.setattr(DataProviderRegistry, "create",
-                            lambda market, **kwargs: _StubProvider())
+        def _spy_create(market, **kwargs):
+            created_kwargs.update(kwargs)
+            return _StubProvider()
+
+        monkeypatch.setattr(DataProviderRegistry, "create", _spy_create)
         cfg = ConsoleConfig.from_env()
-        cfg.symbols = ["ETH-USD"]
+        cfg.symbols = ["MSFT", "AAPL"]     # the PYROBOT_SYMBOLS default must be ignored
         cfg.strategy_name = "crypto_trend"
         cfg.n_bars = 200
         cfg.bar_interval = 0.0
@@ -226,7 +233,12 @@ class TestSupervisorLifecycle:
         try:
             assert sup.start() is True
             assert sup.state == SupervisorState.RUNNING
+            # Provider created with the market defaults — no PYROBOT_SYMBOLS leak.
+            assert "symbols" not in created_kwargs
             assert sup.pipeline is not None
+            # Strategy + pipeline drive the market universe, not MSFT/AAPL.
+            assert sup.pipeline.symbols == ["ETH-USD"]
+            assert sup.config.strategy_name and sup.pipeline.signal_source.symbols == ["ETH-USD"]
             limits = sup.pipeline.risk_manager.limits
             assert limits.max_position_size_pct == 0.05          # crypto cap
             assert limits.max_sector_concentration_pct == 0.10   # crypto cap

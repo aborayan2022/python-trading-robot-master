@@ -146,5 +146,9 @@ data/audit/*paper_session*.jsonl
 data/reports/*paper_session*.json
 data/reports/*paper_session*.jsonl
 
+# Live-session telemetry (appended every smoke/run; always dirty if tracked)
+data/audit/ledger.jsonl
+data/metrics/runtime_metrics.jsonl
+
 # Local planning scratch files (work-tree only)
 .zcode/

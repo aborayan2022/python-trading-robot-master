@@ -6,7 +6,7 @@
 |---|---|
 | **Project** | `python-trading-robot-master` |
 | **Plan** | `AI_Quant_Trading_Platform_Multi_Market_Wave_Prompt.md` (v0.2.0 → Multi-Market) |
-| **Report date** | 2026-09-10 |
+| **Report date** | 2026-09-11 |
 | **Prepared by** | Programmer Team Leader (review & completion of interrupted final task) |
 | **Status** | **COMPLETE — all 5 waves implemented, Wave 5 remediation & revalidation delivered, 561 tests green** |
 | **Headline** | 3 markets × 7 strategies, bi-directional, cost-adjusted, benchmark-compared. **Wave-5 revalidation with real short-side execution shows NO strategy beats Buy & Hold on its own market in the 2021–2026 window** (best: `us_trend` +91.9% vs B&H +195.1%). The earlier "+134%" `metals_trend` figure was an artifact of a runner that silently dropped short orders — it is retracted. |

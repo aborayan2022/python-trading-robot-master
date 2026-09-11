@@ -13,6 +13,7 @@ from typing import Dict
 import pandas as pd
 import pytest
 
+from pyrobot.backtesting.runner import _git_provenance
 from pyrobot.brokers.paper_broker import PaperBroker
 from pyrobot.data.sectors import (
     MARKET_RISK_LIMITS,
@@ -41,6 +42,30 @@ WAVE5_STRATEGIES = [
     USBreakoutStrategy,
     USMeanReversionStrategy,
 ]
+
+
+class TestReportProvenance:
+    """Backtest reports must carry the git commit + dirty-tree flag so results
+    can always be mapped back to the exact code state that produced them
+    (review follow-up: provenance for reproducible reports)."""
+
+    def test_git_provenance_shape(self):
+        prov = _git_provenance()
+        assert isinstance(prov, dict)
+        assert isinstance(prov["git_commit"], str) and prov["git_commit"]
+        assert isinstance(prov["dirty_tree"], bool)
+        # The test tree may itself be dirty while the suite runs, so only the
+        # SHA's existence is asserted — the flag is recorded, not enforced here.
+
+    def test_git_provenance_reflects_clean_tree(self, monkeypatch):
+        import subprocess
+
+        sha = "a" * 40
+        monkeypatch.setattr(
+            subprocess, "check_output",
+            lambda args, **k: (sha + "\n") if "rev-parse" in args else "",
+        )
+        assert _git_provenance() == {"git_commit": sha, "dirty_tree": False}
 
 
 def _bars(prices, day0, symbol="BTC-USD", volume=1_000_000.0):

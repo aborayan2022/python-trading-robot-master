@@ -129,6 +129,35 @@ class RuntimeSupervisor:
 
     # ── Persistence helpers ───────────────────────────────────────────────────
 
+    def _resolve_signal_source(self, symbols: List[str]) -> Any:
+        """Build the active signal source for the given trading symbols.
+
+        A named ``PYROBOT_STRATEGY`` resolved via StrategyRegistry wins over the
+        legacy ``PYROBOT_SIGNAL_SOURCE`` split (so a container whose compose
+        file sets PYROBOT_STRATEGY actually trades that strategy). The strategy
+        is constructed with ``symbols`` so the market profile can drive it with
+        the market's real universe.
+        """
+        if self.config.strategy_name:
+            from pyrobot.strategies import register_builtin_strategies
+            from pyrobot.strategies.registry import StrategyRegistry
+
+            register_builtin_strategies()
+            return StrategyRegistry.create(
+                self.config.strategy_name,
+                symbols=symbols,
+                strategy_id=self.config.strategy_name,
+            )
+        if self.config.signal_source == "example":
+            return ExampleStrategy(strategy_id="demo_sma_cross", symbols=symbols)
+        if self.config.signal_source == "trend":
+            from pyrobot.strategies.us_trend import USTrendFollowStrategy
+
+            return USTrendFollowStrategy(strategy_id="us_trend_follow", symbols=symbols)
+        from pyrobot.ai.ensemble import EnsembleSignalEngine
+
+        return EnsembleSignalEngine()
+
     def _read_last_metrics_record(self) -> Optional[Dict[str, Any]]:
         """Read the most recent persisted metrics snapshot (None if none)."""
         metrics_path = Path(self.config.metrics_path)
@@ -221,30 +250,10 @@ class RuntimeSupervisor:
 
                 self._metrics = RuntimeMetrics(output_path=self.config.metrics_path)
 
-                # Select signal source / strategy. A named PYROBOT_STRATEGY
-                # resolved via StrategyRegistry wins over the legacy
-                # PYROBOT_SIGNAL_SOURCE split (so a container whose compose file
-                # sets PYROBOT_STRATEGY actually trades that strategy).
-                if self.config.strategy_name:
-                    from pyrobot.strategies import register_builtin_strategies
-                    from pyrobot.strategies.registry import StrategyRegistry
-
-                    register_builtin_strategies()
-                    source = StrategyRegistry.create(
-                        self.config.strategy_name,
-                        symbols=self.config.symbols,
-                        strategy_id=self.config.strategy_name,
-                    )
-                elif self.config.signal_source == "example":
-                    source: Any = ExampleStrategy(strategy_id="demo_sma_cross", symbols=self.config.symbols)
-                elif self.config.signal_source == "trend":
-                    from pyrobot.strategies.us_trend import USTrendFollowStrategy
-
-                    source = USTrendFollowStrategy(strategy_id="us_trend_follow", symbols=self.config.symbols)
-                else:
-                    from pyrobot.ai.ensemble import EnsembleSignalEngine
-
-                    source = EnsembleSignalEngine()
+                # Select signal source / strategy (symbols are finalized below
+                # for the market profile, which drives the strategy with the
+                # market's own universe).
+                source = self._resolve_signal_source(self.config.symbols)
 
                 # Build Pipeline and Provider
                 if self.config.profile == "replay":
@@ -272,9 +281,12 @@ class RuntimeSupervisor:
                     )
                     provider = alpaca_polling_provider(AlpacaDataProvider(), self.config.symbols)
                 elif self.config.profile == "market":
-                    # PYROBOT_MARKET finally drives behavior: the provider is
-                    # resolved through DataProviderRegistry and the pipeline gets
-                    # that market's sector map + risk limits.
+                    # PYROBOT_MARKET drives behavior: the provider is resolved
+                    # through DataProviderRegistry and the pipeline gets that
+                    # market's sector map + risk limits. Symbols come from the
+                    # market provider's own defaults (DEFAULT_METALS /
+                    # DEFAULT_CRYPTO) — PYROBOT_SYMBOLS / the US replay default
+                    # must never leak MSFT,AAPL into the metals/crypto market.
                     from pyrobot.backtesting.runner import MultiMarketBacktest
                     from pyrobot.data.registry import (
                         DataProviderRegistry,
@@ -285,9 +297,7 @@ class RuntimeSupervisor:
 
                     register_builtin_data_providers()
                     market = get_market_from_env()
-                    data_provider = DataProviderRegistry.create(
-                        market, symbols=self.config.symbols,
-                    )
+                    data_provider = DataProviderRegistry.create(market)
                     frames = data_provider.load_cached()
                     if not frames:
                         raise RuntimeError(
@@ -295,6 +305,7 @@ class RuntimeSupervisor:
                             "Run the market session seed (metals/crypto_paper_session --smoke) first."
                         )
                     symbols = sorted(frames)
+                    source = self._resolve_signal_source(symbols)
                     bars = MultiMarketBacktest.build_bar_series(frames)
                     if self.config.n_bars:
                         bars = bars[-int(self.config.n_bars):]

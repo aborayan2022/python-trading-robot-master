@@ -24,7 +24,7 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Optional, Type
 
 import numpy as np
 import pandas as pd
@@ -38,6 +38,34 @@ from pyrobot.strategies.base import BaseStrategy
 logger = get_logger("backtest_runner")
 
 INITIAL_BALANCE = 100_000.0
+
+
+def _git_provenance() -> Dict[str, Any]:
+    """Best-effort repo provenance for a backtest report.
+
+    Records the checked-out ``git_commit`` and a ``dirty_tree`` flag (True when
+    any tracked files are modified or untracked non-ignored files exist at run
+    time), so a report can always be mapped back to the exact code state that
+    generated it. A dirty tree makes results non-reproducible in principle; the
+    convention (governance §6, ``docs/professional_development_standard.md``) is
+    to regenerate reports only from a clean commit. Never raises: outside a git
+    clone the commit is omitted and the tree is conservatively flagged dirty.
+    """
+    commit: Optional[str] = None
+    dirty = True
+    try:
+        import subprocess
+
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip() or None
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+        dirty = bool(status)
+    except Exception:
+        pass
+    return {"git_commit": commit, "dirty_tree": dirty}
 MAX_POSITION_FRACTION = 0.12
 HISTORY_WINDOW = 300
 
@@ -386,6 +414,7 @@ class MultiMarketBacktest:
             "strategy": self.strategy_name,
             "symbols": self.symbols,
             "starting_balance": self.initial_balance,
+            "provenance": _git_provenance(),
             "honest_backtest": honest,
             "buy_and_hold": {"summary": bh_summary, "equity_curve": bh["equity_curve"]},
         }
@@ -437,6 +466,7 @@ class MultiMarketBacktest:
             "strategy": self.strategy_name,
             "symbols": self.symbols,
             "starting_balance": self.initial_balance,
+            "provenance": _git_provenance(),
             "honest_backtest": honest,
             "buy_and_hold": {"summary": bh_summary, "equity_curve": bh["equity_curve"]},
             "runtime_replay": replay,

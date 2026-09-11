@@ -42,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 from pyrobot.backtesting.cost_model import ExecutionCostModel
+from pyrobot.backtesting.runner import _git_provenance
 from pyrobot.runtime.loop import (
     TradingLoop,
     build_default_pipeline,
@@ -461,6 +462,7 @@ def main() -> None:
     report = {
         "title": "US Market Trading Test — USTrendFollowStrategy",
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "provenance": _git_provenance(),
         "universe_universe": symbols,
         "symbols": symbols,
         "strategy": "USTrendFollowStrategy",

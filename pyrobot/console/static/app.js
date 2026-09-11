@@ -1177,6 +1177,9 @@
         closeModals();
         await checkAuth();
         refreshActiveTabData();
+        // The EventSource created at page load failed with 401 while anonymous;
+        // browsers do not reliably retry it after the session cookie appears.
+        initSSE();
       } else {
         showToast(state.lang === 'ar' ? 'رمز وصول غير صالح' : 'Invalid access token', 'error');
       }
