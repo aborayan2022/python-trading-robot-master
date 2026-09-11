@@ -67,6 +67,33 @@ class TestReportProvenance:
         )
         assert _git_provenance() == {"git_commit": sha, "dirty_tree": False}
 
+    def test_git_provenance_ignores_untracked_report_batches(self, monkeypatch):
+        # A sequential backtest batch creates new report files (untracked `??`)
+        # after the first run; those are the product, not code changes, so they
+        # must not flag the later runs' reports as dirty.
+        import subprocess
+
+        sha = "b" * 40
+        status = "?? data/reports/crypto_trend_backtest_20260911_070000.json\n" \
+                 "?? data/reports/us_breakout_backtest_20260911_070000.json\n"
+        monkeypatch.setattr(
+            subprocess, "check_output",
+            lambda args, **k: (sha + "\n") if "rev-parse" in args else status,
+        )
+        assert _git_provenance() == {"git_commit": sha, "dirty_tree": False}
+
+    def test_git_provenance_flags_tracked_modification(self, monkeypatch):
+        import subprocess
+
+        sha = "c" * 40
+        status = " M pyrobot/backtesting/runner.py\n"
+        monkeypatch.setattr(
+            subprocess, "check_output",
+            lambda args, **k: (sha + "\n") if "rev-parse" in args else status,
+        )
+        prov = _git_provenance()
+        assert prov["git_commit"] == sha and prov["dirty_tree"] is True
+
 
 def _bars(prices, day0, symbol="BTC-USD", volume=1_000_000.0):
     bars = []
