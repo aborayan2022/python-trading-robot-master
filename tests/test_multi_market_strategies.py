@@ -51,6 +51,45 @@ def _bars_from_prices(prices, day0: datetime) -> list:
     return bars
 
 
+def _bars_for_us_trend(day0: datetime) -> list:
+    """Gentle uptrend riding RSI 45–75 (BUY), then a steeper leg pushing
+    RSI ≥ 70 while holding (SELL) — guaranteed trades through the pipeline."""
+    prices = [
+        100.0 + 0.4 * i + 8.0 * math.sin(i / 7) + (2.0 if i % 5 == 0 else 0)
+        for i in range(260)
+    ]
+    base = 100.0 + 0.4 * 259 + 8.0 * math.sin(259 / 7)
+    prices += [base + 2.2 * i for i in range(90)]
+    return _bars_from_prices(prices, day0)
+
+
+def _bars_for_us_mean_rev(day0: datetime) -> list:
+    """Sine oscillation with volume spikes on down-bars, so RSI < 30 below
+    the lower Bollinger band is triggered with volume_ok → BUY; reversion to
+    SMA exits. Guaranteed round trips through the pipeline."""
+    prices = []
+    sma_buf = []
+    n = 400
+    for i in range(n):
+        p = 100.0 + 8.0 * math.sin(2 * math.pi * i / 30)
+        prices.append(round(p, 2))
+        sma_buf.append(p)
+    bars = []
+    for i, close in enumerate(prices):
+        sma20 = sum(sma_buf[max(0, i - 19):i + 1]) / min(20, i + 1)
+        spike = close < sma20
+        ts = day0 + timedelta(days=i)
+        bars.append({
+            "open": close,
+            "high": close * 1.001,
+            "low": close * 0.999,
+            "close": close,
+            "volume": 1_000_000.0 * (3.0 if spike else 1.0),
+            "datetime": ts,
+        })
+    return bars
+
+
 def _stock_frame(bars: list, symbol: str = "TEST"):
     df = pd.DataFrame(bars)
     df["symbol"] = symbol
@@ -262,22 +301,28 @@ class TestCryptoMeanReversionStrategy:
 
 class TestStrategyPipelineIntegration:
     def test_us_trend_pipeline(self):
-        prices = _trend_path(500)
-        bars = [{"TEST": bar} for bar in _bars_from_prices(prices, datetime(2021, 1, 1, tzinfo=timezone.utc))]
+        bars = [{"TEST": bar} for bar in _bars_for_us_trend(datetime(2021, 1, 1, tzinfo=timezone.utc))]
         from pyrobot.strategies.us_trend import USTrendFollowStrategy
         strategy = USTrendFollowStrategy(strategy_id="e2e_us_trend", symbols=["TEST"])
         pipeline = build_default_pipeline(symbols=["TEST"], initial_balance=100_000.0, strategy=strategy)
         loop = TradingLoop(pipeline=pipeline, bar_provider=replay_provider(bars), bar_interval=0.0)
         result = loop.run()
-        # Pipeline processes bars — signals are generated even if risk rejects orders.
+        # e2e proof: the pipeline must actually *trade* on the trending path —
+        # at least one BUY entry filled and one SELL exit filled, with net
+        # account value moving off the starting balance.
+        fills = [o for o in pipeline.order_manager.all_orders() if o.status.value == "FILLED"]
+        sides = [o.side.value for o in fills]
         assert result.get("bars_processed", 0) > 0
+        assert "BUY" in sides and "SELL" in sides, f"expected real trades, got sides={sides}"
+        assert pipeline.broker.get_account_info()["equity"] != 100_000.0
 
     def test_us_mean_rev_pipeline(self):
-        prices = _mean_rev_path(500)
-        bars = [{"TEST": bar} for bar in _bars_from_prices(prices, datetime(2021, 1, 1, tzinfo=timezone.utc))]
+        bars = [{"TEST": bar} for bar in _bars_for_us_mean_rev(datetime(2021, 1, 1, tzinfo=timezone.utc))]
         from pyrobot.strategies.us_mean_reversion import USMeanReversionStrategy
         strategy = USMeanReversionStrategy(strategy_id="e2e_us_mr", symbols=["TEST"])
         pipeline = build_default_pipeline(symbols=["TEST"], initial_balance=100_000.0, strategy=strategy)
         loop = TradingLoop(pipeline=pipeline, bar_provider=replay_provider(bars), bar_interval=0.0)
         result = loop.run()
+        fills = [o for o in pipeline.order_manager.all_orders() if o.status.value == "FILLED"]
         assert result.get("bars_processed", 0) > 0
+        assert len(fills) >= 2, f"expected round-trip trades, got {len(fills)} fills"

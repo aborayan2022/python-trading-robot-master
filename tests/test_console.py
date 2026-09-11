@@ -185,6 +185,55 @@ class TestSupervisorLifecycle:
         assert test_supervisor.config.symbols == ["NVDA", "TSLA"]
         assert test_supervisor.state == SupervisorState.RUNNING
 
+    def test_market_env_selects_market_profile(self, monkeypatch):
+        monkeypatch.setenv("PYROBOT_MARKET", "metals")
+        monkeypatch.delenv("PYROBOT_PROFILE", raising=False)
+        assert ConsoleConfig.from_env().profile == "market"
+
+    def test_us_market_keeps_replay_default(self, monkeypatch):
+        monkeypatch.setenv("PYROBOT_MARKET", "us")
+        monkeypatch.delenv("PYROBOT_PROFILE", raising=False)
+        assert ConsoleConfig.from_env().profile == "replay"
+
+    def test_market_profile_supervisor_start(self, monkeypatch, tmp_path):
+        # The market profile must resolve the provider via DataProviderRegistry
+        # and carry that market's sector map + risk limits into the pipeline.
+        import pandas as pd
+
+        from pyrobot.data.registry import DataProviderRegistry
+
+        monkeypatch.setenv("PYROBOT_MARKET", "crypto")
+        monkeypatch.delenv("PYROBOT_PROFILE", raising=False)
+
+        class _StubProvider:
+            def load_cached(self):
+                idx = pd.date_range("2024-01-01", periods=210, freq="D", tz="UTC")
+                return {"ETH-USD": pd.DataFrame(
+                    {"open": [100.0] * 210, "high": [100.0] * 210, "low": [100.0] * 210,
+                     "close": [100.0] * 210, "volume": [1e6] * 210}, index=idx)}
+
+        monkeypatch.setattr(DataProviderRegistry, "create",
+                            lambda market, **kwargs: _StubProvider())
+        cfg = ConsoleConfig.from_env()
+        cfg.symbols = ["ETH-USD"]
+        cfg.strategy_name = "crypto_trend"
+        cfg.n_bars = 200
+        cfg.bar_interval = 0.0
+        cfg.audit_path = str(tmp_path / "audit.jsonl")
+        cfg.metrics_path = str(tmp_path / "metrics.jsonl")
+
+        sup = RuntimeSupervisor(cfg)
+        try:
+            assert sup.start() is True
+            assert sup.state == SupervisorState.RUNNING
+            assert sup.pipeline is not None
+            limits = sup.pipeline.risk_manager.limits
+            assert limits.max_position_size_pct == 0.05          # crypto cap
+            assert limits.max_sector_concentration_pct == 0.10   # crypto cap
+            assert sup.pipeline.risk_manager.exposure_monitor._sector_map["ETH-USD"] == "Cryptocurrency"
+        finally:
+            sup.stop()
+
 
 # ── Risk Limits & Safety Gates Tests ─────────────────────────────────────────
 

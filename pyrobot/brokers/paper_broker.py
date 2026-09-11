@@ -550,6 +550,7 @@ class PaperBroker(BrokerInterface):
             "positions": self._positions,
             "short_positions": self._short_positions,
             "orders": self._orders,
+            "open_orders": self._open_orders,
         }
         target.write_text(json.dumps(payload, default=str, indent=2), encoding="utf-8")
         logger.info("PaperBroker state saved to %s", target)
@@ -575,6 +576,7 @@ class PaperBroker(BrokerInterface):
         self._positions = {str(k): dict(v) for k, v in payload.get("positions", {}).items()}
         self._short_positions = {str(k): dict(v) for k, v in payload.get("short_positions", {}).items()}
         self._orders = [dict(o) for o in payload.get("orders", [])]
+        self._open_orders = {str(k): dict(v) for k, v in payload.get("open_orders", {}).items()}
         logger.info(
             "PaperBroker restored %d long / %d short positions, cash=%.2f",
             len(self._positions), len(self._short_positions), self._cash_balance,

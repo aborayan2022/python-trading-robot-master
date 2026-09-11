@@ -519,6 +519,7 @@ def _fill(order, row, cost_model, cash, positions, entry_fees, trades, still_pen
             total_qty = position["quantity"] - filled
             position["avg_price"] = ((position["avg_price"] * abs(position["quantity"])) + fill_price * filled) / abs(total_qty)
             position["quantity"] = total_qty
+            entry_fees[sym] = entry_fees.get(sym, 0.0) + fees
         else:
             positions[sym] = {"quantity": -float(filled), "avg_price": fill_price, "entry_ts": str(ts)}
             entry_fees[sym] = fees
@@ -584,6 +585,7 @@ def _fill(order, row, cost_model, cash, positions, entry_fees, trades, still_pen
         total_qty = position["quantity"] + filled
         position["avg_price"] = ((position["avg_price"] * position["quantity"]) + fill_price * filled) / total_qty
         position["quantity"] = total_qty
+        entry_fees[sym] = entry_fees.get(sym, 0.0) + fees
     else:
         positions[sym] = {"quantity": float(filled), "avg_price": fill_price, "entry_ts": str(ts)}
         entry_fees[sym] = fees

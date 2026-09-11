@@ -49,9 +49,10 @@ class SupervisorState(str, Enum):
 class ConsoleConfig:
     """Unified runtime configuration for the management console."""
 
-    profile: str = "replay"  # "replay" | "alpaca_paper" | "alpaca_live_locked"
+    profile: str = "replay"  # "replay" | "market" | "alpaca_paper" | "alpaca_live_locked"
     symbols: List[str] = field(default_factory=lambda: ["MSFT", "AAPL"])
     signal_source: str = "example"  # "example" | "ensemble" | "trend"
+    strategy_name: str = ""  # any StrategyRegistry name (PYROBOT_STRATEGY) → wins over signal_source
     bar_interval: float = 1.0
     n_bars: int = 500
     seed: int = 7
@@ -68,10 +69,18 @@ class ConsoleConfig:
         """Construct console config from system environment variables."""
         symbols_str = os.environ.get("PYROBOT_SYMBOLS", "MSFT,AAPL")
         symbols = [s.strip().upper() for s in symbols_str.split(",") if s.strip()]
+        market = os.environ.get("PYROBOT_MARKET", "").strip().lower()
+        explicit_profile = os.environ.get("PYROBOT_PROFILE", "").strip().lower()
+        # When PYROBOT_PROFILE is unset, PYROBOT_MARKET=metals|crypto selects the
+        # market console profile (DataProviderRegistry + per-market risk limits);
+        # US/unset keep the historical default (replay).
+        if not explicit_profile and market in {"metals", "crypto"}:
+            explicit_profile = "market"
         return cls(
-            profile=os.environ.get("PYROBOT_PROFILE", "replay").lower(),
+            profile=(explicit_profile or "replay").lower(),
             symbols=symbols,
             signal_source=os.environ.get("PYROBOT_SIGNAL_SOURCE", "example").lower(),
+            strategy_name=os.environ.get("PYROBOT_STRATEGY", "").strip().lower(),
             bar_interval=float(os.environ.get("PYROBOT_BAR_INTERVAL", "1.0")),
             n_bars=int(os.environ.get("PYROBOT_BARS", "500")),
             seed=int(os.environ.get("PYROBOT_SEED", "7")),
@@ -212,8 +221,21 @@ class RuntimeSupervisor:
 
                 self._metrics = RuntimeMetrics(output_path=self.config.metrics_path)
 
-                # Select signal source
-                if self.config.signal_source == "example":
+                # Select signal source / strategy. A named PYROBOT_STRATEGY
+                # resolved via StrategyRegistry wins over the legacy
+                # PYROBOT_SIGNAL_SOURCE split (so a container whose compose file
+                # sets PYROBOT_STRATEGY actually trades that strategy).
+                if self.config.strategy_name:
+                    from pyrobot.strategies import register_builtin_strategies
+                    from pyrobot.strategies.registry import StrategyRegistry
+
+                    register_builtin_strategies()
+                    source = StrategyRegistry.create(
+                        self.config.strategy_name,
+                        symbols=self.config.symbols,
+                        strategy_id=self.config.strategy_name,
+                    )
+                elif self.config.signal_source == "example":
                     source: Any = ExampleStrategy(strategy_id="demo_sma_cross", symbols=self.config.symbols)
                 elif self.config.signal_source == "trend":
                     from pyrobot.strategies.us_trend import USTrendFollowStrategy
@@ -249,6 +271,43 @@ class RuntimeSupervisor:
                         strategy=source if isinstance(source, BaseStrategy) else None,
                     )
                     provider = alpaca_polling_provider(AlpacaDataProvider(), self.config.symbols)
+                elif self.config.profile == "market":
+                    # PYROBOT_MARKET finally drives behavior: the provider is
+                    # resolved through DataProviderRegistry and the pipeline gets
+                    # that market's sector map + risk limits.
+                    from pyrobot.backtesting.runner import MultiMarketBacktest
+                    from pyrobot.data.registry import (
+                        DataProviderRegistry,
+                        get_market_from_env,
+                        register_builtin_data_providers,
+                    )
+                    from pyrobot.data.sectors import build_risk_limits, build_sector_map
+
+                    register_builtin_data_providers()
+                    market = get_market_from_env()
+                    data_provider = DataProviderRegistry.create(
+                        market, symbols=self.config.symbols,
+                    )
+                    frames = data_provider.load_cached()
+                    if not frames:
+                        raise RuntimeError(
+                            f"No cached market data for PYROBOT_MARKET={market}. "
+                            "Run the market session seed (metals/crypto_paper_session --smoke) first."
+                        )
+                    symbols = sorted(frames)
+                    bars = MultiMarketBacktest.build_bar_series(frames)
+                    if self.config.n_bars:
+                        bars = bars[-int(self.config.n_bars):]
+                    self._pipeline = build_default_pipeline(
+                        symbols=symbols,
+                        mode=self.config.mode,
+                        initial_balance=self.config.initial_balance,
+                        audit_path=self.config.audit_path,
+                        strategy=source if isinstance(source, BaseStrategy) else None,
+                        sector_map=build_sector_map(symbols),
+                        risk_limits=build_risk_limits(symbols),
+                    )
+                    provider = replay_provider(bars)
                 else:
                     raise ValueError(f"Unknown profile: {self.config.profile}")
 
@@ -276,6 +335,7 @@ class RuntimeSupervisor:
                         "profile": self.config.profile,
                         "symbols": self.config.symbols,
                         "signal_source": self.config.signal_source,
+                        "strategy": self.config.strategy_name or self.config.signal_source,
                     },
                 )
                 logger.info("Supervisor started trading loop in background thread.")
@@ -440,6 +500,7 @@ class RuntimeSupervisor:
                 "profile": self.config.profile,
                 "symbols": self.config.symbols,
                 "signal_source": self.config.signal_source,
+                "strategy": self.config.strategy_name or None,
                 "equity": round(equity, 2),
                 "drawdown": round(drawdown, 4),
                 "daily_pnl": round(daily_pnl, 2),

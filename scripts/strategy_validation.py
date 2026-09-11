@@ -55,6 +55,7 @@ def main() -> None:
         rows.append({
             "strategy": strategy,
             "report": report.name,
+            "generated_at": data.get("generated_at"),
             "walk_forward": {
                 "validator": "WalkForwardValidator",
                 "available": True,
@@ -69,13 +70,19 @@ def main() -> None:
             },
         })
 
-    rows.sort(key=lambda r: (r["strategy"], r["report"]))
+    rows.sort(key=lambda r: (r["strategy"], r.get("generated_at") or "", r["report"]))
     # Keep the latest report per strategy so stale duplicates never inflate —
-    # or worse, split — a strategy's validation result.
+    # or worse, split — a strategy's validation result. Ordering is by the
+    # report's generated_at timestamp (not the filename) so retired runs tagged
+    # with a "_superseded_" marker never displace the newest honest backtest.
     latest: dict = {}
     for r in rows:
-        if r["strategy"] not in latest or r["report"] > latest[r["strategy"]]["report"]:
+        key = (r.get("generated_at") or "", r["report"])
+        if r["strategy"] not in latest or key > latest[r["strategy"]]["_key"]:
+            r["_key"] = key
             latest[r["strategy"]] = r
+    for r in latest.values():
+        r.pop("_key", None)
     rows = [latest[k] for k in sorted(latest)]
     payload = {
         "title": "Per-Strategy Walk-Forward + Monte Carlo Validation",

@@ -79,6 +79,23 @@ class DataProviderRegistry:
         cls._registry.clear()
 
 
+def register_builtin_data_providers() -> None:
+    """Register the built-in market data providers into DataProviderRegistry.
+
+    Lazy imports keep backtest-only code paths from loading yfinance/Alpaca
+    SDKs when they never touch the registry.
+    """
+    if DataProviderRegistry.available():
+        return
+    from pyrobot.data.alpaca import AlpacaDataProvider
+    from pyrobot.data.crypto_provider import CryptoProvider
+    from pyrobot.data.metals_provider import MetalsProvider
+
+    DataProviderRegistry.register("us", AlpacaDataProvider)
+    DataProviderRegistry.register("metals", MetalsProvider)
+    DataProviderRegistry.register("crypto", CryptoProvider)
+
+
 def get_market_from_env() -> str:
     """Read the current market from the PYROBOT_MARKET environment variable."""
     return os.environ.get("PYROBOT_MARKET", "us").lower()

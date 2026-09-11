@@ -13,7 +13,10 @@ limit still applies defensively to any symbol not in the curated map.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable
+from typing import TYPE_CHECKING, Dict, Iterable
+
+if TYPE_CHECKING:
+    from pyrobot.risk.limits import RiskLimits
 
 US_EQUITY_GICS_SECTORS: Dict[str, str] = {
     "AAPL": "Information Technology",
@@ -96,6 +99,30 @@ def risk_limits_for_symbols(symbols: Iterable[str]) -> Dict[str, float]:
             for m in markets if m in MARKET_RISK_LIMITS
         ),
     }
+
+
+def build_risk_limits(symbols: Iterable[str]) -> "RiskLimits":
+    """Build effective RiskLimits for a (possibly mixed) market universe.
+
+    Overrides the conservative defaults' per-position and per-sector caps with
+    the tightest per-market values in the universe (crypto is the tightest,
+    followed by metals; US keeps the widest). All other conservative limits
+    (daily loss, drawdown) remain at their safe defaults.
+
+    Args:
+        symbols: Trading universe to derive per-market limits from.
+
+    Returns:
+        A validated RiskLimits instance.
+    """
+    from pyrobot.risk.limits import RiskLimits
+
+    effective = risk_limits_for_symbols(symbols)
+    limits = RiskLimits.conservative()
+    limits.max_position_size_pct = effective["max_position_size_pct"]
+    limits.max_sector_concentration_pct = effective["max_sector_exposure_pct"]
+    limits.validate()
+    return limits
 
 
 def build_sector_map(symbols: Iterable[str]) -> Dict[str, str]:

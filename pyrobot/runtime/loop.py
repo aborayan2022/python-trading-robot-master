@@ -215,16 +215,42 @@ def build_default_pipeline(
     strategy: Optional[BaseStrategy] = None,
     ensemble: Optional[EnsembleSignalEngine] = None,
     drift_detector: Optional[DriftDetector] = None,
+    sector_map: Optional[Dict[str, str]] = None,
+    risk_limits: Optional[RiskLimits] = None,
 ) -> TradingPipeline:
     """Assemble the standard paper-mode pipeline from environment-style args.
 
     Signal source defaults to a plain EnsembleSignalEngine (unfitted models →
     NO_TRADE) unless a strategy or a fitted ensemble is supplied — explicit
     beats accidental trading.
+
+    Args:
+        symbols: Trading universe.
+        mode: "paper" or "dry_run".
+        initial_balance: Virtual starting cash.
+        audit_path: Optional audit ledger path.
+        strategy: Optional BaseStrategy driving signals.
+        ensemble: Optional fitted ensemble signal engine.
+        drift_detector: Optional PSI drift monitor.
+        sector_map: Optional symbol → sector map. When omitted the risk
+            manager buckets every symbol under UNKNOWN (safe but undifferent-
+            iated concentration). Multi-market sessions pass the real map so
+            metals/crypto concentration limits actually bite.
+        risk_limits: Optional RiskLimits. Defaults to RiskLimits(); market
+            sessions pass build_risk_limits() so per-market position caps
+            (e.g. crypto 5% per symbol / 10% per sector) are enforced.
     """
     ledger = AuditLedger(log_path=audit_path) if audit_path else AuditLedger()
     broker = PaperBroker(initial_balance=initial_balance)
     source: EnsembleSignalEngine | BaseStrategy = ensemble or strategy or EnsembleSignalEngine()
+    risk_manager: Optional[RiskManager] = None
+    if sector_map is not None or risk_limits is not None:
+        from pyrobot.data.sectors import build_sector_map
+
+        risk_manager = RiskManager(
+            limits=risk_limits or RiskLimits(),
+            sector_map=sector_map or build_sector_map(symbols),
+        )
     return TradingPipeline(
         broker=broker,
         symbols=symbols,
@@ -232,6 +258,7 @@ def build_default_pipeline(
         audit_ledger=ledger,
         drift_detector=drift_detector,
         dry_run=(mode == "dry_run"),
+        risk_manager=risk_manager,
     )
 
 

@@ -49,13 +49,30 @@
   per-bar borrow/carry on open shorts. Parameters are placeholders pending a
   counterparty contract.
 
-## 8. Decision
+## 8. Framework comparison: NautilusTrader (Track 3 standard gateway)
+- Evaluated as the "standard execution/backtest gateway" alternative to the
+  in-house pipeline. Not selected for this market:
+  - NautilusTrader is venue-agnostic and event-driven; adopting it requires
+    porting the strategy layer, risk-manager semantics, cost model, and
+    audit/paper-broker persistence onto its abstractions — a rewrite, not a
+    migration.
+  - The honest backtest already encodes the two-sided accounting (next-bar-open
+    fills, volume-participation cap, borrow/carry, 365-day Sharpe). Moving to
+    NautilusTrader would re-derive the same assumptions under different hooks
+    without changing the economics.
+  - Retains value as the recommended gateway if live exchange execution is
+    adopted (Track 3 port); logged in `roadmap.md` / `open_items.md`.
+- 24/7/365 calendar and placeholder cost/fee parameters carry over to any
+  engine.
+
+## 9. Decision
 - [x] APPROVED — proceed to Wave implementation (executed in Wave 1; revalidated
   with honest short-side accounting in Wave 5). No live trading.
-- Note: revalidated 5y results: crypto_trend +2.8%, crypto_mean_rev −3.4% vs
+- Note: revalidated 5y results: crypto_trend +2.2%, crypto_mean_rev −3.4% vs
   crypto Buy & Hold +18.0% — see `AI_Quant_Multi_Market_Advisory_Report.md` §3.
+  (2026-09-11 re-run from committed HEAD superseded the interim +2.8%.)
 
-## 9. Impact on Code
+## 10. Impact on Code
 - `pyrobot/data/crypto_provider.py` — CryptoProvider + 24/7/365 calendar + quality.
 - `pyrobot/data/sectors.py` — crypto sector classification (Wave 5).
 - `pyrobot/strategies/crypto_trend.py`, `crypto_mean_rev.py` — strategies.
@@ -64,7 +81,7 @@
 - `pyrobot/backtesting/runner.py`, `cost_model.py` — honest short accounting + borrow.
 - `data/reports/*crypto*`, `data/audit/*crypto*` — reports & audit trail.
 
-## 10. Post-hoc Acknowledgment (required by Wave 5 governance)
+## 11. Post-hoc Acknowledgment (required by Wave 5 governance)
 - **Sequence breach:** this memo is written **after** the market was implemented
   (Wave 1, 2026-09-09), violating §9 of the wave order (memo first). The
   governing standard (`docs/professional_development_standard.md`) requires

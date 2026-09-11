@@ -175,11 +175,15 @@ def run_smoke(opts: Dict[str, Any], report: Dict[str, Any]) -> Dict[str, Any]:
 
     # Verify pipeline wiring
     print("Building paper pipeline (auth + wiring check) ...")
+    from pyrobot.data.sectors import build_risk_limits, build_sector_map
     from pyrobot.runtime.loop import build_default_pipeline
     from pyrobot.strategies.metals_trend import MetalsTrendFollowStrategy
 
     strategy = MetalsTrendFollowStrategy(strategy_id="metals_trend", symbols=symbols)
-    pipeline = build_default_pipeline(symbols=symbols, initial_balance=100_000.0, strategy=strategy)
+    pipeline = build_default_pipeline(
+        symbols=symbols, initial_balance=100_000.0, strategy=strategy,
+        sector_map=build_sector_map(symbols), risk_limits=build_risk_limits(symbols),
+    )
     counts = pipeline.seed_history(seed_entries)
     print(f"Pipeline ready: history seeded {counts}")
 
@@ -198,6 +202,7 @@ def run_session(opts: Dict[str, Any], report: Dict[str, Any], *, dry_run: bool =
     audit_path = str(_audit_dir(root) / f"metals_paper_session_{_session_date()}.jsonl")
     provider = MetalsProvider(symbols=symbols, data_dir=root / "data" / "metals")
 
+    from pyrobot.data.sectors import build_risk_limits, build_sector_map
     from pyrobot.runtime.loop import build_default_pipeline
     from pyrobot.strategies.metals_trend import MetalsTrendFollowStrategy
 
@@ -206,6 +211,7 @@ def run_session(opts: Dict[str, Any], report: Dict[str, Any], *, dry_run: bool =
     pipeline = build_default_pipeline(
         symbols=symbols, initial_balance=100_000.0, audit_path=audit_path, strategy=strategy,
         mode=("dry_run" if dry_run else "paper"),
+        sector_map=build_sector_map(symbols), risk_limits=build_risk_limits(symbols),
     )
     report["dry_run"] = dry_run
     report["audit_path"] = audit_path

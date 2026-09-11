@@ -49,14 +49,35 @@
   per-bar borrow/carry on open shorts. Parameters are placeholders pending
   broker/counterparty contract.
 
-## 8. Decision
+## 8. Framework comparison: NautilusTrader (Track 3 standard gateway)
+- Evaluated as the "standard execution/backtest gateway" alternative to the
+  in-house pipeline (`TradingLoop` + `PaperBroker` + honest runner). Not
+  selected for this market:
+  - NautilusTrader is a venue-agnostic event-driven engine; adopting it means
+    porting the strategy layer, risk-manager semantics (per-market limits,
+    sector concentration), cost model, and audit/paper-broker persistence onto
+    its abstractions — a full rewrite rather than a migration.
+  - The existing honest backtest (next-bar-open fills, volume-participation
+    cap, borrow/carry on shorts, per-bar Sharpe annualization) already encodes
+    the two-sided accounting this market needs; NautilusTrader's fill modeling
+    would require re-deriving the same assumptions there.
+  - Strategic value of NautilusTrader (replay-grade execution, native risk
+    stack, Python-native) is real; it is the recommended *next* gateway for a
+    Track-3 port if live broker execution is adopted. Tracked in
+    `roadmap.md` / `open_items.md` rather than forcing a rewrite now.
+- Short borrow/carry placeholder (1.0% p.a.) and no contract-roll mitigation
+  would carry over to any engine.
+
+## 9. Decision
 - [x] APPROVED — proceed to Wave implementation (executed in Wave 1; revalidated
   with honest short-side accounting in Wave 5). No live trading.
 - Note: revalidated 5y results show neither metals strategy beats the metals
-  Buy & Hold benchmark (metals_trend −17.6%, metals_momentum −19.8%) — see
-  `AI_Quant_Multi_Market_Advisory_Report.md` §3.
+  Buy & Hold benchmark (metals_trend −57.5%, metals_momentum −12.0%) — see
+  `AI_Quant_Multi_Market_Advisory_Report.md` §3. A 2026-09-11 re-run from
+  committed HEAD superseded the interim figures (−17.6% / −19.8%) that had
+  been captured from an in-flight working tree.
 
-## 9. Impact on Code
+## 10. Impact on Code
 - `pyrobot/data/metals_provider.py` — MetalsProvider + COMEX calendar + quality.
 - `pyrobot/data/sectors.py` — metals sector classification (Wave 5).
 - `pyrobot/strategies/metals_trend.py`, `metals_momentum.py` — strategies.
@@ -65,7 +86,7 @@
 - `pyrobot/backtesting/runner.py`, `cost_model.py` — honest short accounting + borrow.
 - `data/reports/*metals*`, `data/audit/*metals*` — reports & audit trail.
 
-## 10. Post-hoc Acknowledgment (required by Wave 5 governance)
+## 11. Post-hoc Acknowledgment (required by Wave 5 governance)
 - **Sequence breach:** this memo is written **after** the market was implemented
   (Wave 1, 2026-09-09), violating §9 of the wave order which requires the memo
   **before** implementation. The governing standard

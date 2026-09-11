@@ -1,6 +1,6 @@
 {
   "title": "Multi-Market Backtest Comparison",
-  "generated_at": "2026-09-10T17:24:40.786271+00:00",
+  "generated_at": "2026-09-11T00:13:42.885521+00:00",
   "market_count": 3,
   "strategy_count": 7,
   "strategies": [
@@ -34,8 +34,8 @@
       "strategy": "crypto_mean_rev",
       "market": "Crypto",
       "strategy_label": "Crypto (mean reversion)",
-      "report": "crypto_mean_rev_backtest_20260910_165228.json",
-      "generated_at": "2026-09-10T16:52:28.215983+00:00",
+      "report": "crypto_mean_rev_backtest_20260911_000916.json",
+      "generated_at": "2026-09-11T00:09:16.784140+00:00",
       "symbols": [
         "BTC-USD",
         "ETH-USD"
@@ -52,66 +52,66 @@
       "strategy": "crypto_trend",
       "market": "Crypto",
       "strategy_label": "Crypto (trend / breakout)",
-      "report": "crypto_trend_backtest_20260910_165003.json",
-      "generated_at": "2026-09-10T16:50:03.475026+00:00",
+      "report": "crypto_trend_backtest_20260911_000747.json",
+      "generated_at": "2026-09-11T00:07:47.455199+00:00",
       "symbols": [
         "BTC-USD",
         "ETH-USD"
       ],
-      "strategy_return_pct": 2.82,
+      "strategy_return_pct": 2.19,
       "buy_and_hold_return_pct": 18.0,
       "beat_benchmark": false,
-      "sharpe_ratio": 0.2181,
-      "max_drawdown_pct": -4.2,
-      "total_trades": 12,
-      "win_rate_pct": 66.67
+      "sharpe_ratio": 0.1714,
+      "max_drawdown_pct": -4.6,
+      "total_trades": 13,
+      "win_rate_pct": 61.54
     },
     {
       "strategy": "metals_momentum",
       "market": "Metals",
       "strategy_label": "Precious metals (momentum)",
-      "report": "metals_momentum_backtest_20260910_161649.json",
-      "generated_at": "2026-09-10T16:16:49.307374+00:00",
+      "report": "metals_momentum_backtest_20260911_000634.json",
+      "generated_at": "2026-09-11T00:06:34.957853+00:00",
       "symbols": [
         "GC=F",
         "SI=F",
         "GLD",
         "SLV"
       ],
-      "strategy_return_pct": -19.82,
+      "strategy_return_pct": -11.97,
       "buy_and_hold_return_pct": 136.26,
       "beat_benchmark": false,
-      "sharpe_ratio": -0.6428,
-      "max_drawdown_pct": -25.78,
-      "total_trades": 55,
-      "win_rate_pct": 32.73
+      "sharpe_ratio": -0.5217,
+      "max_drawdown_pct": -15.21,
+      "total_trades": 75,
+      "win_rate_pct": 21.33
     },
     {
       "strategy": "metals_trend",
       "market": "Metals",
       "strategy_label": "Precious metals (trend-follow)",
-      "report": "metals_trend_backtest_20260910_161431.json",
-      "generated_at": "2026-09-10T16:14:31.447812+00:00",
+      "report": "metals_trend_backtest_20260911_000520.json",
+      "generated_at": "2026-09-11T00:05:20.582351+00:00",
       "symbols": [
         "GC=F",
         "SI=F",
         "GLD",
         "SLV"
       ],
-      "strategy_return_pct": -17.58,
+      "strategy_return_pct": -57.48,
       "buy_and_hold_return_pct": 136.26,
       "beat_benchmark": false,
-      "sharpe_ratio": -0.5076,
-      "max_drawdown_pct": -24.3,
-      "total_trades": 275,
-      "win_rate_pct": 39.64
+      "sharpe_ratio": -0.412,
+      "max_drawdown_pct": -73.63,
+      "total_trades": 442,
+      "win_rate_pct": 31.22
     },
     {
       "strategy": "us_breakout",
       "market": "US",
       "strategy_label": "US equities (breakout)",
-      "report": "us_breakout_backtest_20260910_162237.json",
-      "generated_at": "2026-09-10T16:22:37.766205+00:00",
+      "report": "us_breakout_backtest_20260910_235654.json",
+      "generated_at": "2026-09-10T23:56:54.996714+00:00",
       "symbols": [
         "AAPL",
         "MSFT",
@@ -136,8 +136,8 @@
       "strategy": "us_mean_reversion",
       "market": "US",
       "strategy_label": "US equities (mean reversion)",
-      "report": "us_mean_reversion_backtest_20260910_164750.json",
-      "generated_at": "2026-09-10T16:47:50.931645+00:00",
+      "report": "us_mean_reversion_backtest_20260911_000337.json",
+      "generated_at": "2026-09-11T00:03:37.087425+00:00",
       "symbols": [
         "AAPL",
         "MSFT",

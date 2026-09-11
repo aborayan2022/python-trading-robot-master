@@ -304,3 +304,37 @@ wrong, and what does the verification procedure change?
 - `pyrobot/backtesting/cost_model.py` — `estimate_borrow_cost`.
 - `data/reports/*_backtest_20260910_16*.json` — revalidated full runs.
 - test: `pytest tests/` (561 passed) + synthetic short round-trip.
+
+---
+
+## 2026-09-11 — Final-HEAD re-run correction (Wave 5 close-out)
+
+**Observation:** the interim strategy figures referenced above (+2.8% crypto_trend,
+−17.6%/−19.8% metals, captured from `20260910_16xxxx` runs) were produced against an
+in-flight working tree and did **not** reproduce from the committed code once the Wave-5
+remediation diff was closed. Per the lesson logged above ("always treat 'backtest is
+honest' as an assertion to re-verify"), all six strategy backtests were re-run again from
+committed HEAD.
+
+**Result (authoritative, `data/reports/*_backtest_20260911_*.json` → §3 of the advisory):**
+- `crypto_trend` +2.19%; `crypto_mean_rev` −3.40% (unchanged).
+- `metals_momentum` −11.97% (improved from −19.8% under ratcheted stops).
+- `metals_trend` −57.48% (degrades from −17.6%; high churn from partial-fill requeues +
+  ratcheted exits, MC ruin probability 99.0%).
+- `us_breakout` −11.52%, `us_mean_reversion` −0.05% (unchanged).
+- No strategy beats Buy & Hold; short-side conclusion is unchanged but stronger.
+
+**Decision / Lesson:**
+- Validation numbers for a release must be regenerated **after** the final commit, not
+  captured from the working tree during remediation; the earlier advisory + memos shipped
+  stale figures. The advisory and both decision memos now carry the corrected numbers and
+  note the superseded interim values explicitly.
+- `scripts/strategy_validation.py` now selects the latest report by `generated_at`
+  timestamp (not filename sort), so `_superseded_`-tagged audit artifacts can no longer
+  displace the newest honest run.
+
+**Impact on code:**
+- `scripts/strategy_validation.py` — latest-report selection via `generated_at`.
+- `data/reports/multi_market_comparison.json`, `data/reports/strategy_validation.json` —
+  regenerated.
+- `data/reports/*_backtest_20260911_*.json` — final honest full runs.

@@ -145,3 +145,6 @@ data/paper_state/
 data/audit/*paper_session*.jsonl
 data/reports/*paper_session*.json
 data/reports/*paper_session*.jsonl
+
+# Local planning scratch files (work-tree only)
+.zcode/

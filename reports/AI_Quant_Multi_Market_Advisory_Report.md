@@ -110,28 +110,30 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 | Strategy | Market | Return | Buy & Hold | Sharpe | MaxDD | Trades | WinRate | Beats B&H? |
 |---|---|---|---|---|---|---|---|---|
 | **us_trend** (existing) | US | **+91.91%** | +195.08% | 1.19 | -15.1% | 631 | 64.5% | ❌ |
-| crypto_trend | Crypto | +2.82% | +18.0% | 0.22 | -4.2% | 12 | 66.7% | ❌ |
+| crypto_trend | Crypto | +2.19% | +18.0% | 0.17 | -4.6% | 13 | 61.5% | ❌ |
 | us_mean_reversion | US | −0.05% | +195.08% | 0.04 | -13.2% | 343 | 43.4% | ❌ |
 | crypto_mean_rev | Crypto | −3.40% | +18.0% | -0.35 | -4.3% | 16 | 37.5% | ❌ |
 | us_breakout | US | −11.52% | +195.08% | -0.35 | -17.1% | 126 | 31.8% | ❌ |
-| metals_trend | Metals | −17.58% | +136.26% | -0.51 | -24.3% | 275 | 39.6% | ❌ |
-| metals_momentum | Metals | −19.82% | +136.26% | -0.64 | -25.8% | 55 | 32.7% | ❌ |
+| metals_trend | Metals | −57.48% | +136.26% | -0.41 | -73.6% | 442 | 31.2% | ❌ |
+| metals_momentum | Metals | −11.97% | +136.26% | -0.52 | -15.2% | 75 | 21.3% | ❌ |
 
-> **Why the earlier +134% `metals_trend` figure is retracted:** commit `d050f3d`'s runner routed `SELL_SHORT` orders through the plain `SELL` (exit) branch — if no long was open the order was silently dropped, and if a long was open it was *closed* at the short signal. No short was ever actually opened. Combined with a (since-fixed) `metals_trend.on_order_fill` bug that treated `SELL_SHORT` as an exit and `BUY_TO_COVER` as an entry, the old numbers were effectively a subset of long-only behavior. Restoring true short execution and exit bookkeeping is what the honest Metalls/other results above reflect. Shorts can now both open and close, and borrow/carry is charged per bar on open short notional.
+> **Why the earlier +134% `metals_trend` figure is retracted:** commit `d050f3d`'s runner routed `SELL_SHORT` orders through the plain `SELL` (exit) branch — if no long was open the order was silently dropped, and if a long was open it was *closed* at the short signal. No short was ever actually opened. Combined with a (since-fixed) `metals_trend.on_order_fill` bug that treated `SELL_SHORT` as an exit and `BUY_TO_COVER` as an entry, the old numbers were effectively a subset of long-only behavior. Restoring true short execution and exit bookkeeping is what the honest metals/other results above reflect. Shorts can now both open and close, and borrow/carry is charged per bar on open short notional.
+
+> **Follow-up re-run (2026-09-11):** the interim metals figure (−17.58% / 275 trades) shipped in commit `a542855` was produced from an intermediate working-tree state (runner short-side / accounting edits still in flight) and does **not** reproduce against the committed code. All six strategy backtests were re-run in full from committed HEAD (files `data/reports/*_backtest_20260910_*/20260911_*.json`); the numbers in this section reflect those runs. Net effect: `metals_trend` degrades to −57.5% and `metals_momentum` improves to −12.0%; nothing crosses the buy-and-hold bar, and the short-side conclusion is unchanged but stronger.
 
 ### Monte Carlo stress (bootstrap over realized trade PnLs, 1000 sims, $100k, ruin = 25% drawdown)
 
 | Strategy | Median return | Worst-5% (p5) | Ruin prob |
 |---|---|---|---|
 | us_trend | +49.1% | +21.3% | 0.1% |
-| crypto_trend | +3.0% | −2.9% | 0.0% |
+| crypto_trend | +2.3% | −3.6% | 0.0% |
 | us_mean_reversion | +0.8% | −20.2% | 5.1% |
 | crypto_mean_rev | −3.4% | −8.8% | 0.0% |
 | us_breakout | −11.3% | −25.0% | 9.3% |
-| metals_trend | −12.7% | −25.5% | 8.9% |
-| metals_momentum | −18.9% | −42.8% | **38.5%** |
+| metals_trend | −39.4% | −51.0% | **99.0%** |
+| metals_momentum | −12.3% | −25.4% | 7.3% |
 
-> Note: only `us_trend` and `crypto_trend` have positive Monte-Carlo medians, and `us_trend` alone is positive at the 5th percentile. `metals_momentum` shows a 38.5% ruin probability — the weakest profile in the suite. The patterns are consistent with single-market momentum/trend-following substantially lagging buy-and-hold through the 2021–2026 equity/metals rally, while paying spread+fee drag and (for metals) borrow on unprofitable short trades.
+> Note: only `us_trend` and `crypto_trend` have positive Monte-Carlo medians, and `us_trend` alone is positive at the 5th percentile. `metals_momentum` shows a 7.3% ruin probability and `metals_trend` a **99.0%** ruin probability — the weakest profile in the suite by far. The patterns are consistent with single-market momentum/trend-following substantially lagging buy-and-hold through the 2021–2026 equity/metals rally, while paying spread+fee drag and (for metals) borrow on unprofitable short trades. `metals_trend` reinforces the short-side drag finding: ratcheted exits plus many small partial-fill churn trades turned its long/ short book into a −57.5% round trip.
 
 ---
 
@@ -156,15 +158,15 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 3. Crypto/metals data via **yfinance** (accepted by the directive as the primary source); daily bars, not intraday.
 4. Regime→strategy mapping and position scaling constants (0.25–1.0) are **rule defaults**, not ML-tuned.
 5. The two `us_trend` backtest reports in `data/reports/` are pre-existing project artifacts (kept as historical evidence); the 6 new-strategy reports were regenerated on corrected data.
-6. The 6 new-strategy reports were **re-run in full** for Wave 5 (files stamped `20260910_16xxxx`); older reports of the same strategies are retained for audit but are superseded. Short borrow uses 1.0% p.a. as a placeholder rate until the broker/counterparty contract is known.
+6. The 6 new-strategy reports were **re-run in full** for Wave 5 (final stamp `20260911_00xxxx`); older reports (including the `20260910_16xxxx` batch and `_superseded_20260909_` artifacts) are retained for audit but are superseded. Short borrow uses 1.0% p.a. as a placeholder rate until the broker/counterparty contract is known.
 
 ---
 
 ## 6. What remains risky (honest list)
 
 1. **No strategy beats Buy & Hold with costs in this window.** By the directive's own Rule 2/5/8, none of the 7 survives the "beat Buy & Hold after costs" test on 2021–2026 daily data. The platform should **not** be marketed as multi-market alpha; treat every strategy as unproven until out-of-sample/walk-forward validation is attached.
-2. **Short-side drag is now material.** True short execution + borrow + low short-side win rates drive most of the degradation vs the old long-only figures (e.g., `metals_trend` now trades 275 times at 39.6% win vs the old 66-trade long-only subset). The sell logic, not just the accounting, needs rework before any short book is defensible.
-3. **Parameterization is default-only.** No walk-forward tuning was performed on the 6 new strategies (prohibition: no tuning on the test set). Nearest to positive: `crypto_trend` (+2.8%, 66.7% win) and `us_mean_reversion` (−0.05%, positive MC median). Weakest: `metals_momentum` (38.5% ruin).
+2. **Short-side drag is now material.** True short execution + borrow + low short-side win rates drive most of the degradation vs the old long-only figures (e.g., `metals_trend` now trades 442 times at 31.2% win for −57.5% vs the old 66-trade long-only subset). The sell logic, not just the accounting, needs rework before any short book is defensible.
+3. **Parameterization is default-only.** No walk-forward tuning was performed on the 6 new strategies (prohibition: no tuning on the test set). Nearest to positive: `crypto_trend` (+2.2%, 61.5% win) and `us_mean_reversion` (−0.05%, positive MC median). Weakest: `metals_trend` (99.0% ruin).
 4. **Data quality**: futures volume for GC=F/SI=F has small pockets of zero-volume days (data artifact, not fatal); crypto/metals caches are one-refresh-old; no futures contract roll handling (CME GC/SI have no roll logic in `metals_provider.py`).
 5. `StrategyRegistry.clear()` remains a footgun for tests if the registry is not re-populated (mitigated by `register_builtin_strategies()`).
 6. Docker Compose validated locally with `docker compose config` (v2). The literal `docker-compose` (v1) binary was not installed on the review machine; CI does not run compose, so real container startup remains unverified.
@@ -189,7 +191,7 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 3. **Next quarter (next wave) priorities**, in order:
    - Walk-forward parameter research focused on `crypto_trend`, `us_mean_reversion`, `us_trend` (closest to a positive cost-adjusted profile);
    - Rework the short-side logic in the metals/US strategies (low short win rate + borrow drag), then revalidate; until then, cap or disable shorts;
-   - **Retire or rewrite** `metals_momentum` per Rule 5 (38.5% MC ruin — quality over quantity);
+   - **Retire or rewrite** `metals_trend` per Rule 5 (99.0% MC ruin on the honest short-included run — quality over quantity); keep `metals_momentum` (7.3% ruin) research-only;
    - Add CME futures roll handling to `metals_provider.py` and re-run metals windows;
    - Expand paper sessions to run on schedule (cron) so live market conditions feed the audit trail;
    - Wire `RegimeStrategyMatcher` output into position sizing in the live pipeline (currently advisory-only).

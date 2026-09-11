@@ -1,10 +1,11 @@
 {
   "title": "Per-Strategy Walk-Forward + Monte Carlo Validation",
-  "generated_at": "2026-09-10T16:52:46.437811+00:00",
+  "generated_at": "2026-09-11T00:14:41.316482+00:00",
   "strategies": [
     {
       "strategy": "USTrendFollowStrategy",
       "report": "us_strategy_backtest_20260905_224939.json",
+      "generated_at": "2026-09-05T22:49:39.197268+00:00",
       "walk_forward": {
         "validator": "WalkForwardValidator",
         "available": true,
@@ -35,7 +36,8 @@
     },
     {
       "strategy": "crypto_mean_rev",
-      "report": "crypto_mean_rev_backtest_20260910_165228.json",
+      "report": "crypto_mean_rev_backtest_20260911_000916.json",
+      "generated_at": "2026-09-11T00:09:16.784140+00:00",
       "walk_forward": {
         "validator": "WalkForwardValidator",
         "available": true,
@@ -66,7 +68,8 @@
     },
     {
       "strategy": "crypto_trend",
-      "report": "crypto_trend_backtest_20260910_165003.json",
+      "report": "crypto_trend_backtest_20260911_000747.json",
+      "generated_at": "2026-09-11T00:07:47.455199+00:00",
       "walk_forward": {
         "validator": "WalkForwardValidator",
         "available": true,
@@ -79,25 +82,26 @@
       },
       "monte_carlo": {
         "simulations": 1000,
-        "median_return_pct": 3.04,
-        "p5_return_pct (worst 5%)": -2.86,
-        "p95_return_pct": 8.27,
-        "median_max_drawdown_pct": 2.13,
-        "worst_case_drawdown_pct (99th%)": 6.48,
+        "median_return_pct": 2.3,
+        "p5_return_pct (worst 5%)": -3.61,
+        "p95_return_pct": 7.96,
+        "median_max_drawdown_pct": 2.19,
+        "worst_case_drawdown_pct (99th%)": 6.93,
         "ruin_probability_pct": 0.0,
-        "median_sharpe": 0.2604,
-        "p5_sharpe": -0.2572
+        "median_sharpe": 0.1899,
+        "p5_sharpe": -0.3239
       },
       "realized": {
-        "total_trades": 12,
-        "strategy_return_pct": 2.82,
-        "max_drawdown_pct": -4.2,
-        "win_rate_pct": 66.67
+        "total_trades": 13,
+        "strategy_return_pct": 2.19,
+        "max_drawdown_pct": -4.6,
+        "win_rate_pct": 61.54
       }
     },
     {
       "strategy": "metals_momentum",
-      "report": "metals_momentum_backtest_20260910_161649.json",
+      "report": "metals_momentum_backtest_20260911_000634.json",
+      "generated_at": "2026-09-11T00:06:34.957853+00:00",
       "walk_forward": {
         "validator": "WalkForwardValidator",
         "available": true,
@@ -110,25 +114,26 @@
       },
       "monte_carlo": {
         "simulations": 1000,
-        "median_return_pct": -18.93,
-        "p5_return_pct (worst 5%)": -42.79,
-        "p95_return_pct": -1.23,
-        "median_max_drawdown_pct": 21.84,
-        "worst_case_drawdown_pct (99th%)": 51.42,
-        "ruin_probability_pct": 38.5,
-        "median_sharpe": -0.2219,
-        "p5_sharpe": -0.3807
+        "median_return_pct": -12.3,
+        "p5_return_pct (worst 5%)": -25.43,
+        "p95_return_pct": 0.32,
+        "median_max_drawdown_pct": 14.52,
+        "worst_case_drawdown_pct (99th%)": 32.67,
+        "ruin_probability_pct": 7.3,
+        "median_sharpe": -0.2009,
+        "p5_sharpe": -0.4125
       },
       "realized": {
-        "total_trades": 55,
-        "strategy_return_pct": -19.82,
-        "max_drawdown_pct": -25.78,
-        "win_rate_pct": 32.73
+        "total_trades": 75,
+        "strategy_return_pct": -11.97,
+        "max_drawdown_pct": -15.21,
+        "win_rate_pct": 21.33
       }
     },
     {
       "strategy": "metals_trend",
-      "report": "metals_trend_backtest_20260910_161431.json",
+      "report": "metals_trend_backtest_20260911_000520.json",
+      "generated_at": "2026-09-11T00:05:20.582351+00:00",
       "walk_forward": {
         "validator": "WalkForwardValidator",
         "available": true,
@@ -141,25 +146,26 @@
       },
       "monte_carlo": {
         "simulations": 1000,
-        "median_return_pct": -12.72,
-        "p5_return_pct (worst 5%)": -25.45,
-        "p95_return_pct": 0.09,
-        "median_max_drawdown_pct": 15.93,
-        "worst_case_drawdown_pct (99th%)": 31.96,
-        "ruin_probability_pct": 8.9,
-        "median_sharpe": -0.0966,
-        "p5_sharpe": -0.1923
+        "median_return_pct": -39.44,
+        "p5_return_pct (worst 5%)": -51.03,
+        "p95_return_pct": -28.06,
+        "median_max_drawdown_pct": 39.99,
+        "worst_case_drawdown_pct (99th%)": 57.14,
+        "ruin_probability_pct": 99.0,
+        "median_sharpe": -0.275,
+        "p5_sharpe": -0.3537
       },
       "realized": {
-        "total_trades": 275,
-        "strategy_return_pct": -17.58,
-        "max_drawdown_pct": -24.3,
-        "win_rate_pct": 39.64
+        "total_trades": 442,
+        "strategy_return_pct": -57.48,
+        "max_drawdown_pct": -73.63,
+        "win_rate_pct": 31.22
       }
     },
     {
       "strategy": "us_breakout",
-      "report": "us_breakout_backtest_20260910_162237.json",
+      "report": "us_breakout_backtest_20260910_235654.json",
+      "generated_at": "2026-09-10T23:56:54.996714+00:00",
       "walk_forward": {
         "validator": "WalkForwardValidator",
         "available": true,
@@ -190,7 +196,8 @@
     },
     {
       "strategy": "us_mean_reversion",
-      "report": "us_mean_reversion_backtest_20260910_164750.json",
+      "report": "us_mean_reversion_backtest_20260911_000337.json",
+      "generated_at": "2026-09-11T00:03:37.087425+00:00",
       "walk_forward": {
         "validator": "WalkForwardValidator",
         "available": true,

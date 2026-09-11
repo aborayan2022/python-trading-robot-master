@@ -127,8 +127,8 @@ class CryptoMeanReversionStrategy(MultiSymbolStrategy):
         """Synchronize holding/direction state with a broker position snapshot.
 
         Positive quantity → long, negative quantity → short, zero → flat.
-        Stop-loss uses the broker average price when available; the entry-price
-        override is only applied on fills after sync.
+        The snapshot carries quantities only (no prices), so the stop-loss is
+        disabled until the next fill records an entry price via on_order_fill.
 
         Args:
             positions: symbol → quantity (per the broker account).

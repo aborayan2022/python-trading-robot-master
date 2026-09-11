@@ -56,6 +56,9 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
         self._holding_direction: Dict[str, str] = {s: "flat" for s in self._symbols}
         self._entry_bar_idx: Dict[str, int] = {s: 0 for s in self._symbols}
         self._entry_price: Dict[str, float] = {}
+        self._stop_level: Dict[str, float] = {}
+        self._extreme_high: Dict[str, float] = {}
+        self._extreme_low: Dict[str, float] = {}
         self._bar_count: Dict[str, int] = {s: 0 for s in self._symbols}
 
     def initialize(self) -> None:
@@ -95,21 +98,35 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
             self._holding[symbol] = True
             self._holding_direction[symbol] = "long" if direction == "BUY" else "short"
             self._entry_bar_idx[symbol] = self._bar_count[symbol]
+            self._entry_price[symbol] = _fill_price(order_dict, self._entry_price.get(symbol))
+            self._stop_level.pop(symbol, None)
+            self._extreme_high.pop(symbol, None)
+            self._extreme_low.pop(symbol, None)
             self.set_symbol_state(symbol, "holding", True)
         elif direction in ("SELL", "BUY_TO_COVER"):
             self._holding[symbol] = False
             self._holding_direction[symbol] = "flat"
             self._entry_price.pop(symbol, None)
+            self._stop_level.pop(symbol, None)
+            self._extreme_high.pop(symbol, None)
+            self._extreme_low.pop(symbol, None)
             self.set_symbol_state(symbol, "holding", False)
         else:
             if self._holding.get(symbol, False):
                 self._holding[symbol] = False
                 self._holding_direction[symbol] = "flat"
                 self._entry_price.pop(symbol, None)
+                self._stop_level.pop(symbol, None)
+                self._extreme_high.pop(symbol, None)
+                self._extreme_low.pop(symbol, None)
                 self.set_symbol_state(symbol, "holding", False)
             else:
                 self._holding[symbol] = True
                 self._entry_bar_idx[symbol] = self._bar_count[symbol]
+                self._entry_price[symbol] = _fill_price(order_dict, self._entry_price.get(symbol))
+                self._stop_level.pop(symbol, None)
+                self._extreme_high.pop(symbol, None)
+                self._extreme_low.pop(symbol, None)
                 self.set_symbol_state(symbol, "holding", True)
 
     def get_holding(self, symbol: str) -> bool:
@@ -119,7 +136,8 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
         """Synchronize holding/direction state with a broker position snapshot.
 
         Positive quantity → long, negative quantity → short, zero → flat.
-        Time-stop bars are restarted from the current bar on sync.
+        Time-stop bars are restarted from the current bar on sync; the
+        ratcheted trailing stop re-seeds from the first bar after sync.
 
         Args:
             positions: symbol → quantity (per the broker account).
@@ -133,8 +151,14 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
             self._holding_direction[symbol] = "long" if qty > 0 else ("short" if qty < 0 else "flat")
             if qty == 0:
                 self._entry_price.pop(symbol, None)
+                self._stop_level.pop(symbol, None)
+                self._extreme_high.pop(symbol, None)
+                self._extreme_low.pop(symbol, None)
             else:
                 self._entry_bar_idx[symbol] = self._bar_count.get(symbol, 0)
+                self._stop_level.pop(symbol, None)
+                self._extreme_high.pop(symbol, None)
+                self._extreme_low.pop(symbol, None)
             self.set_symbol_state(symbol, "holding", qty != 0.0)
             logger.info(
                 "CryptoTrendBreakoutStrategy %s synced position for %s: qty=%s holding=%s direction=%s",
@@ -195,17 +219,24 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
                 action = SignalAction.SELL if self._holding_direction.get(symbol) == "long" else SignalAction.BUY_TO_COVER
                 return self._make_signal(symbol, action, 0.9, f"Time stop: held {bars_held} bars")
 
+            # Trailing stop anchored to the actual fill price and ratcheted off
+            # the running high/low since entry: it protects realized gains and
+            # never drifts back toward the signal close as ATR changes.
             entry_p = self._entry_price.get(symbol, close)
             if self._holding_direction.get(symbol) == "long":
-                stop_level = entry_p - trail_mult * atr
-                if close < stop_level:
+                self._extreme_high[symbol] = max(self._extreme_high.get(symbol, entry_p), close)
+                candidate = self._extreme_high[symbol] - trail_mult * atr
+                self._stop_level[symbol] = max(self._stop_level.get(symbol, candidate), candidate)
+                if close < self._stop_level[symbol]:
                     return self._make_signal(symbol, SignalAction.SELL, 0.85,
-                        f"Crypto ATR trailing stop: close {close:.2f} < {stop_level:.2f}")
+                        f"Crypto ATR trailing stop: close {close:.2f} < stop {self._stop_level[symbol]:.2f} (from high {self._extreme_high[symbol]:.2f}, entry {entry_p:.2f})")
             else:
-                stop_level = entry_p + trail_mult * atr
-                if close > stop_level:
+                self._extreme_low[symbol] = min(self._extreme_low.get(symbol, entry_p), close)
+                candidate = self._extreme_low[symbol] + trail_mult * atr
+                self._stop_level[symbol] = min(self._stop_level.get(symbol, candidate), candidate)
+                if close > self._stop_level[symbol]:
                     return self._make_signal(symbol, SignalAction.BUY_TO_COVER, 0.85,
-                        f"Crypto ATR trailing stop: close {close:.2f} > {stop_level:.2f}")
+                        f"Crypto ATR trailing stop: close {close:.2f} > stop {self._stop_level[symbol]:.2f} (from low {self._extreme_low[symbol]:.2f}, entry {entry_p:.2f})")
 
             return Signal(
                 symbol=symbol, action=SignalAction.HOLD,
@@ -254,6 +285,24 @@ class CryptoTrendBreakoutStrategy(MultiSymbolStrategy):
         self._record_signal(signal)
         self._set_state(StrategyState.RUNNING)
         return signal
+
+
+def _fill_price(order_dict: dict, default: Optional[float] = None) -> Optional[float]:
+    """Extract the actual fill price from an order dict when present.
+
+    Post-trade callbacks carry the real execution price (``fill_price`` or
+    ``avg_fill_price``); the strategy records it so the ATR trailing stop is
+    anchored to the true entry cost rather than the signal bar's close.
+    """
+    for key in ("fill_price", "avg_fill_price"):
+        raw = order_dict.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            continue
+    return default
 
 
 def _safe_value(value) -> Optional[float]:

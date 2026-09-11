@@ -3,7 +3,11 @@
 from pyrobot.data.base import Candle, DataFrequency, MarketDataProvider, Quote
 from pyrobot.data.feed import MarketDataFeed
 from pyrobot.data.quality import DataAnomaly, DataQualityEngine, DataQualityReport, DatasetMetadata
-from pyrobot.data.registry import DataProviderRegistry, get_market_from_env
+from pyrobot.data.registry import (
+    DataProviderRegistry,
+    get_market_from_env,
+    register_builtin_data_providers,
+)
 from pyrobot.data.storage import DatasetStore, DatasetVersion
 
 try:
@@ -40,4 +44,5 @@ __all__ = [
     "CryptoProvider",
     "DataProviderRegistry",
     "get_market_from_env",
+    "register_builtin_data_providers",
 ]
