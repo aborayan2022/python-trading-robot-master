@@ -375,3 +375,77 @@ to the reviewer's reproduction figure-for-figure.
   provenance tests.
 - `.gitignore`, `data/reports/*_superseded_20260910_*`, `data/audit/ledger.jsonl`,
   `data/metrics/runtime_metrics.jsonl` (untracked).
+
+---
+
+## 2026-09-11 — Weekly research session (scheduled)
+
+**Question:** How do each market's strategies compare against their Buy & Hold benchmark this week?
+
+**Sources:** Pending follow-up library scan.
+
+**Findings:**
+- 2026-09-11: scheduled weekly research session ran; aggregates regenerated
+  (multi_market_comparison.py, strategy_validation.py) and provenance-verified.
+**Multi-market benchmarks (Buy & Hold comparison):**
+
+| Strategy | Market | Strategy % | Buy & Hold % | Outcome | Provenance |
+|---|---|---:|---:|---|---|
+| USTrendFollowStrategy | US | 91.91% | 195.08% | behind benchmark | OK |
+| crypto_mean_rev | Crypto | -3.4% | 18.0% | behind benchmark | OK |
+| crypto_trend | Crypto | 2.19% | 18.0% | behind benchmark | OK |
+| metals_momentum | Metals | -11.97% | 136.26% | behind benchmark | OK |
+| metals_trend | Metals | -57.48% | 136.26% | behind benchmark | OK |
+| us_breakout | US | -11.52% | 195.08% | behind benchmark | OK |
+| us_mean_reversion | US | -0.05% | 195.08% | behind benchmark | OK |
+
+- Scan the reference library for updates / reported errors, then replace this
+  stub with the findings, comparison, and decision (see the Entry Template above
+  and the seven-pitfall checklist in `professional_development_standard.md`).
+
+**Comparison with our use case:** Pending.
+
+**Decision / Lesson:** Pending.
+
+**Impact on code:**
+- none — decision pending.
+
+
+---
+
+## 2026-09-11 (3rd) — Consultant approval: Wave 5 closed, controls wired in
+
+**Decision (consultant verdict 2026-09-11):** Wave 5 is **APPROVED and closed** —
+no further engine/strategy modifications without a brand-new report batch. Live
+trading stays suspended; paper phase continues 3–6 months per `production_runbook`;
+no new markets until the Wave 6 walk-forward analysis concludes.
+
+**Controls executed in this commit batch (`8e63d87`):**
+- **#2 Dry-run scheduled sessions:** `metals_paper_session.py` and
+  `crypto_paper_session.py` cron jobs switched from `--now` (execution) to
+  `--dry-run` (monitoring only, no broker orders) pending Wave 6 verdicts.
+  metals_trend is slated for retirement (−57.5%, 99% MC ruin); crypto_trend stays
+  research-only (+2.2%, 0% ruin). The two daily sessions remain as a verification
+  structure; they are no longer strategy "execution". Crontab installed live.
+- **#3 dirty_tree corollary:** `docs/professional_development_standard.md` §3b.5 —
+  untracked-code blind spot documented; new `.py` must ship in the same batch as
+  its reports; uncommitted-tree reports are never release aggregates.
+- **#4a Walk-forward honesty:** `strategy_validation.json` no longer claims
+  `available: true` without figures — `available: false`, `results: null` until
+  Wave 6 populates them. (Independent verification note: this was double-checked
+  by running the regenerated validation file this session.)
+- **#6 Weekly gate:** `weekly_research.py` always regenerates both aggregates via
+  subprocess, provenance-gates every strategy (PROVENANCE REJECTED → exit non-zero),
+  and records rejections in the log stub. `us_trend` re-run from clean `8e63d87`
+  (`us_strategy_backtest_20260911_092937.json`, git_commit + dirty_tree=false),
+  figures unchanged: +91.91% / 631 trades / B&H +195.08%.
+
+**Impact on code:**
+- `scripts/cron/pyrobot.crontab` — metals + crypto sessions → `--dry-run`.
+- `scripts/multi_market_comparison.py`, `scripts/strategy_validation.py` —
+  provenance gate (REJECTED → exit non-zero), provenance fields in rows.
+- `scripts/strategy_validation.py` — walk_forward available=false + results=null.
+- `scripts/weekly_research.py` — always regenerate + provenance gate + exit code.
+- `docs/professional_development_standard.md` — §3b.5 corollary.
+- `data/reports/multi_market_comparison.json`, `strategy_validation.json` —
+  regenerated; `us_strategy_backtest_20260911_092937.json` — new.

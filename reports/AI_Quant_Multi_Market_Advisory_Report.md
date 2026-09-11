@@ -157,7 +157,7 @@ Market data: US 10 stocks / metals (GC=F, SI=F, GLD, SLV) / crypto (BTC-USD, ETH
 2. "Honest backtest" = fills at **next bar open** using `ExecutionCostModel` (spread, slippage, commission, SEC fee, participation caps); no look-ahead beyond the fixed warm-up indicators.
 3. Crypto/metals data via **yfinance** (accepted by the directive as the primary source); daily bars, not intraday.
 4. Regime→strategy mapping and position scaling constants (0.25–1.0) are **rule defaults**, not ML-tuned.
-5. The two `us_trend` backtest reports in `data/reports/` are pre-existing project artifacts (kept as historical evidence); the 6 new-strategy reports were regenerated on corrected data.
+5. The `us_trend` backtest reports in `data/reports/` are pre-existing project artifacts (kept as historical evidence); a provenance-certified re-run (`us_strategy_backtest_20260911_092937.json`, clean commit `8e63d87`) is the authoritative reference. The 6 new-strategy reports were regenerated on corrected data.
 6. The 6 new-strategy reports were **re-run in full** for Wave 5 (authoritative batch `20260911_07xxxx`, produced from clean commit `522f98e` with `provenance.dirty_tree=false`); older reports (the `20260910_16xxxx` batch, the `20260911_00xxxx` pre-commit batch, and `_superseded_20260909_` artifacts) are retained for audit but are superseded. Short borrow uses 1.0% p.a. as a placeholder rate until the broker/counterparty contract is known.
 
 ---

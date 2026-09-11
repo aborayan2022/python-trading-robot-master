@@ -1,6 +1,6 @@
 {
   "title": "Multi-Market Backtest Comparison",
-  "generated_at": "2026-09-11T08:03:17.173861+00:00",
+  "generated_at": "2026-09-11T09:30:17.833037+00:00",
   "market_count": 3,
   "strategy_count": 7,
   "strategies": [
@@ -8,8 +8,8 @@
       "strategy": "USTrendFollowStrategy",
       "market": "US",
       "strategy_label": "US equities (trend-follow)",
-      "report": "us_strategy_backtest_20260905_224939.json",
-      "generated_at": "2026-09-05T22:49:39.197268+00:00",
+      "report": "us_strategy_backtest_20260911_092937.json",
+      "generated_at": "2026-09-11T09:29:37.874996+00:00",
       "symbols": [
         "AAPL",
         "MSFT",
@@ -28,7 +28,12 @@
       "sharpe_ratio": 1.1928,
       "max_drawdown_pct": -15.06,
       "total_trades": 631,
-      "win_rate_pct": 64.5
+      "win_rate_pct": 64.5,
+      "provenance": {
+        "git_commit": "8e63d879f536479dafa850353b48a6764f276f79",
+        "dirty_tree": false,
+        "ok": true
+      }
     },
     {
       "strategy": "crypto_mean_rev",
@@ -46,7 +51,12 @@
       "sharpe_ratio": -0.3478,
       "max_drawdown_pct": -4.26,
       "total_trades": 16,
-      "win_rate_pct": 37.5
+      "win_rate_pct": 37.5,
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      }
     },
     {
       "strategy": "crypto_trend",
@@ -64,7 +74,12 @@
       "sharpe_ratio": 0.1714,
       "max_drawdown_pct": -4.6,
       "total_trades": 13,
-      "win_rate_pct": 61.54
+      "win_rate_pct": 61.54,
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      }
     },
     {
       "strategy": "metals_momentum",
@@ -84,7 +99,12 @@
       "sharpe_ratio": -0.5217,
       "max_drawdown_pct": -15.21,
       "total_trades": 75,
-      "win_rate_pct": 21.33
+      "win_rate_pct": 21.33,
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      }
     },
     {
       "strategy": "metals_trend",
@@ -104,7 +124,12 @@
       "sharpe_ratio": -0.412,
       "max_drawdown_pct": -73.63,
       "total_trades": 442,
-      "win_rate_pct": 31.22
+      "win_rate_pct": 31.22,
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      }
     },
     {
       "strategy": "us_breakout",
@@ -130,7 +155,12 @@
       "sharpe_ratio": -0.3472,
       "max_drawdown_pct": -17.11,
       "total_trades": 126,
-      "win_rate_pct": 31.75
+      "win_rate_pct": 31.75,
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      }
     },
     {
       "strategy": "us_mean_reversion",
@@ -156,7 +186,12 @@
       "sharpe_ratio": 0.0356,
       "max_drawdown_pct": -13.15,
       "total_trades": 343,
-      "win_rate_pct": 43.44
+      "win_rate_pct": 43.44,
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      }
     }
   ]
 }

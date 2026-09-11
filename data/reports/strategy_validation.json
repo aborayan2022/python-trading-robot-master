@@ -1,20 +1,28 @@
 {
   "title": "Per-Strategy Walk-Forward + Monte Carlo Validation",
-  "generated_at": "2026-09-11T08:03:20.461742+00:00",
+  "generated_at": "2026-09-11T09:30:20.975460+00:00",
   "strategies": [
     {
       "strategy": "USTrendFollowStrategy",
-      "report": "us_strategy_backtest_20260905_224939.json",
-      "generated_at": "2026-09-05T22:49:39.197268+00:00",
+      "report": "us_strategy_backtest_20260911_092937.json",
+      "generated_at": "2026-09-11T09:29:37.874996+00:00",
+      "provenance": {
+        "git_commit": "8e63d879f536479dafa850353b48a6764f276f79",
+        "dirty_tree": false,
+        "ok": true
+      },
       "walk_forward": {
         "validator": "WalkForwardValidator",
-        "available": true,
+        "validator_constructible": true,
+        "available": false,
+        "results": null,
         "config": {
           "n_splits": 3,
           "train_period_days": 20,
           "test_period_days": 5,
           "embargo_days": 1
-        }
+        },
+        "note": "Walk-forward figures populate this field in Wave 6 (consultant approval \u00a74a); a release cannot claim walk-forward validation without them."
       },
       "monte_carlo": {
         "simulations": 1000,
@@ -38,15 +46,23 @@
       "strategy": "crypto_mean_rev",
       "report": "crypto_mean_rev_backtest_20260911_074556.json",
       "generated_at": "2026-09-11T07:45:56.715111+00:00",
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      },
       "walk_forward": {
         "validator": "WalkForwardValidator",
-        "available": true,
+        "validator_constructible": true,
+        "available": false,
+        "results": null,
         "config": {
           "n_splits": 3,
           "train_period_days": 20,
           "test_period_days": 5,
           "embargo_days": 1
-        }
+        },
+        "note": "Walk-forward figures populate this field in Wave 6 (consultant approval \u00a74a); a release cannot claim walk-forward validation without them."
       },
       "monte_carlo": {
         "simulations": 1000,
@@ -70,15 +86,23 @@
       "strategy": "crypto_trend",
       "report": "crypto_trend_backtest_20260911_074718.json",
       "generated_at": "2026-09-11T07:47:18.697145+00:00",
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      },
       "walk_forward": {
         "validator": "WalkForwardValidator",
-        "available": true,
+        "validator_constructible": true,
+        "available": false,
+        "results": null,
         "config": {
           "n_splits": 3,
           "train_period_days": 20,
           "test_period_days": 5,
           "embargo_days": 1
-        }
+        },
+        "note": "Walk-forward figures populate this field in Wave 6 (consultant approval \u00a74a); a release cannot claim walk-forward validation without them."
       },
       "monte_carlo": {
         "simulations": 1000,
@@ -102,15 +126,23 @@
       "strategy": "metals_momentum",
       "report": "metals_momentum_backtest_20260911_074845.json",
       "generated_at": "2026-09-11T07:48:45.818836+00:00",
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      },
       "walk_forward": {
         "validator": "WalkForwardValidator",
-        "available": true,
+        "validator_constructible": true,
+        "available": false,
+        "results": null,
         "config": {
           "n_splits": 3,
           "train_period_days": 20,
           "test_period_days": 5,
           "embargo_days": 1
-        }
+        },
+        "note": "Walk-forward figures populate this field in Wave 6 (consultant approval \u00a74a); a release cannot claim walk-forward validation without them."
       },
       "monte_carlo": {
         "simulations": 1000,
@@ -134,15 +166,23 @@
       "strategy": "metals_trend",
       "report": "metals_trend_backtest_20260911_075047.json",
       "generated_at": "2026-09-11T07:50:47.962234+00:00",
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      },
       "walk_forward": {
         "validator": "WalkForwardValidator",
-        "available": true,
+        "validator_constructible": true,
+        "available": false,
+        "results": null,
         "config": {
           "n_splits": 3,
           "train_period_days": 20,
           "test_period_days": 5,
           "embargo_days": 1
-        }
+        },
+        "note": "Walk-forward figures populate this field in Wave 6 (consultant approval \u00a74a); a release cannot claim walk-forward validation without them."
       },
       "monte_carlo": {
         "simulations": 1000,
@@ -166,15 +206,23 @@
       "strategy": "us_breakout",
       "report": "us_breakout_backtest_20260911_075456.json",
       "generated_at": "2026-09-11T07:54:56.604948+00:00",
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      },
       "walk_forward": {
         "validator": "WalkForwardValidator",
-        "available": true,
+        "validator_constructible": true,
+        "available": false,
+        "results": null,
         "config": {
           "n_splits": 3,
           "train_period_days": 20,
           "test_period_days": 5,
           "embargo_days": 1
-        }
+        },
+        "note": "Walk-forward figures populate this field in Wave 6 (consultant approval \u00a74a); a release cannot claim walk-forward validation without them."
       },
       "monte_carlo": {
         "simulations": 1000,
@@ -198,15 +246,23 @@
       "strategy": "us_mean_reversion",
       "report": "us_mean_reversion_backtest_20260911_080240.json",
       "generated_at": "2026-09-11T08:02:40.935653+00:00",
+      "provenance": {
+        "git_commit": "522f98e041b0ebac2f8c72b4f868e038f8eac936",
+        "dirty_tree": false,
+        "ok": true
+      },
       "walk_forward": {
         "validator": "WalkForwardValidator",
-        "available": true,
+        "validator_constructible": true,
+        "available": false,
+        "results": null,
         "config": {
           "n_splits": 3,
           "train_period_days": 20,
           "test_period_days": 5,
           "embargo_days": 1
-        }
+        },
+        "note": "Walk-forward figures populate this field in Wave 6 (consultant approval \u00a74a); a release cannot claim walk-forward validation without them."
       },
       "monte_carlo": {
         "simulations": 1000,
